@@ -21,9 +21,16 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_S
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_LEFT_SWIPE_DISCOVER_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
+import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 
 class MainActivity : BaseActivity<ActivityMainBinding>() {
+
+    private companion object {
+        private const val TAG = "OPPLauncherUI"
+        private const val LAUNCHER_PACKAGE = "com.android.launcher"
+    }
 
     private val prefs: YukiHookPrefsBridge by lazy { prefs() }
 
@@ -110,23 +117,47 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     }
 
     private fun restartLauncherProcess(): Boolean {
-        val commands = listOf(
-            "am force-stop com.android.launcher",
-            "monkey -p com.android.launcher -c android.intent.category.LAUNCHER 1"
-        )
-        return runShellCommands(commands, useRoot = true) || runShellCommands(commands, useRoot = false)
+        val forceStopOk = runSuCommand("am force-stop $LAUNCHER_PACKAGE")
+        val homeOk = launchHomeLauncher()
+
+        Log.d(TAG, "restartLauncherProcess forceStopOk=$forceStopOk homeOk=$homeOk")
+        return forceStopOk && homeOk
     }
 
-    private fun runShellCommands(commands: List<String>, useRoot: Boolean): Boolean {
-        return try {
-            val shell = if (useRoot) "su" else "sh"
-            val process = ProcessBuilder(shell).redirectErrorStream(true).start()
-            process.outputStream.bufferedWriter().use { writer ->
-                commands.forEach { writer.write("$it\n") }
-                writer.write("exit\n")
+    private fun runSuCommand(command: String): Boolean {
+        val attempts = listOf(
+            arrayOf("su", "-c", command),
+            arrayOf("su", "0", "sh", "-c", command),
+            arrayOf("/system/bin/su", "-c", command),
+            arrayOf("/system/xbin/su", "-c", command)
+        )
+
+        for (attempt in attempts) {
+            try {
+                val process = Runtime.getRuntime().exec(attempt)
+                val exitCode = process.waitFor()
+                if (exitCode == 0) {
+                    Log.d(TAG, "runSuCommand success via ${attempt.joinToString(" ")}")
+                    return true
+                }
+                Log.d(TAG, "runSuCommand exit=$exitCode via ${attempt.joinToString(" ")}")
+            } catch (e: Throwable) {
+                Log.d(TAG, "runSuCommand failed via ${attempt.joinToString(" ")}: ${e.message}")
             }
-            process.waitFor() == 0
-        } catch (_: Throwable) {
+        }
+        return false
+    }
+
+    private fun launchHomeLauncher(): Boolean {
+        return try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(homeIntent)
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "launchHomeLauncher failed: ${e.message}")
             false
         }
     }

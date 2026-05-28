@@ -79,7 +79,7 @@ object SwipeDownSearchRedirectHook {
                                     } finally {
                                         HookUtils.setRedirectInProgress(false)
                                     }
-                                }, 140L)
+                                }, 0L)
                             } else {
                                 HookUtils.setRedirectInProgress(false)
                             }
