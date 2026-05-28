@@ -305,10 +305,10 @@ object HookUtils {
         )
         for (fieldName in fieldCandidates) {
             try {
-                val result = appsView.current().field {
+                val result = appsView.javaClass.field {
                     name = fieldName
                     superClass(true)
-                }.get().any()
+                }.get(appsView).any()
                 if (result != null) {
                     Log.d(TAG, "[AutoFocus] Using fallback manager field: $fieldName")
                     return result
