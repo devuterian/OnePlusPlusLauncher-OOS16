@@ -113,6 +113,7 @@ dependencies {
     implementation(androidx.appcompat.appcompat)
     implementation(com.google.android.material.material)
     implementation(androidx.constraintlayout.constraintlayout)
+    implementation(androidx.coordinatorlayout.coordinatorlayout)
     testImplementation(junit.junit)
     androidTestImplementation(androidx.test.ext.junit)
     androidTestImplementation(androidx.test.espresso.espresso.core)

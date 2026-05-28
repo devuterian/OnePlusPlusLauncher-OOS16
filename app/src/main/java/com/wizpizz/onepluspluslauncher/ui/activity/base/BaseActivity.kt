@@ -5,13 +5,12 @@ package com.wizpizz.onepluspluslauncher.ui.activity.base
 import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowCompat
 import androidx.viewbinding.ViewBinding
+import com.google.android.material.color.MaterialColors
 import com.highcapable.yukihookapi.hook.factory.current
 import com.highcapable.yukihookapi.hook.factory.method
 import com.highcapable.yukihookapi.hook.type.android.LayoutInflaterClass
-import com.wizpizz.onepluspluslauncher.R
 import com.wizpizz.onepluspluslauncher.utils.factory.isNotSystemInDarkMode
 
 abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
@@ -26,11 +25,6 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
         super.attachBaseContext(wrapped)
     }
 
-    /**
-     * Get the binding layout object
-     *
-     * 获取绑定布局对象
-     */
     lateinit var binding: VB
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,35 +34,20 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
             param(LayoutInflaterClass)
         }?.get()?.invoke<VB>(layoutInflater) ?: error("binding failed")
         setContentView(binding.root)
-        /**
-         * Hide Activity title bar
-         * 隐藏系统的标题栏
-         */
         supportActionBar?.hide()
-        /**
-         * Init immersive status bar
-         * 初始化沉浸状态栏
-         */
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = isNotSystemInDarkMode
             isAppearanceLightNavigationBars = isNotSystemInDarkMode
         }
-        ResourcesCompat.getColor(resources, R.color.colorThemeBackground, null).also {
-            window?.statusBarColor = it
-            window?.navigationBarColor = it
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) window?.navigationBarDividerColor = it
+        val surface = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface)
+        window.statusBarColor = surface
+        window.navigationBarColor = surface
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = surface
         }
-        /**
-         * Init children
-         * 装载子类
-         */
         onCreate()
     }
 
-    /**
-     * Callback [onCreate] method
-     *
-     * 回调 [onCreate] 方法
-     */
     abstract fun onCreate()
 }

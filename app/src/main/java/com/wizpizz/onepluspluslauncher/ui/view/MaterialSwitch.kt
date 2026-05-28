@@ -5,11 +5,10 @@ package com.wizpizz.onepluspluslauncher.ui.view
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.text.TextUtils
 import android.util.AttributeSet
 import androidx.appcompat.widget.SwitchCompat
+import com.google.android.material.color.MaterialColors
 import com.wizpizz.onepluspluslauncher.utils.factory.dp
-import com.wizpizz.onepluspluslauncher.utils.factory.isSystemInDarkMode
 import top.defaults.drawabletoolbox.DrawableBuilder
 
 class MaterialSwitch(context: Context, attrs: AttributeSet?) : SwitchCompat(context, attrs) {
@@ -23,13 +22,15 @@ class MaterialSwitch(context: Context, attrs: AttributeSet?) : SwitchCompat(cont
         return ColorStateList(states, colors)
     }
 
-    private val thumbColor get() = if (context.isSystemInDarkMode) 0xFF7C7C7C else 0xFFCCCCCC
-
     init {
+        val primary = MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary)
+        val surfaceVariant = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurfaceVariant)
+        val onPrimary = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnPrimary)
+
         trackDrawable = DrawableBuilder()
             .rectangle()
             .rounded()
-            .solidColor(0xFF656565.toInt())
+            .solidColor(surfaceVariant)
             .height(20.dp(context))
             .cornerRadius(15.dp(context))
             .build()
@@ -42,13 +43,7 @@ class MaterialSwitch(context: Context, attrs: AttributeSet?) : SwitchCompat(cont
             .strokeWidth(8.dp(context))
             .strokeColor(Color.TRANSPARENT)
             .build()
-        trackTintList = trackColors(
-            0xFF656565.toInt(),
-            thumbColor.toInt(),
-            thumbColor.toInt()
-        )
-        // Removed singleLine and ellipsize to allow text wrapping
-        // isSingleLine = true
-        // ellipsize = TextUtils.TruncateAt.END
+        trackTintList = trackColors(primary, primary, surfaceVariant)
+        thumbTintList = ColorStateList.valueOf(onPrimary)
     }
 }
