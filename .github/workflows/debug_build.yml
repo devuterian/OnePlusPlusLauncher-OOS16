@@ -1,6 +1,7 @@
 name: Android Debug Build
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "master" ] # Or your default branch
     paths:
