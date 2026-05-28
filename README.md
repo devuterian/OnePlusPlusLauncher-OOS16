@@ -2,7 +2,7 @@
 
 # OnePlusPlusLauncher
 
-**OxygenOS 16 / System Launcher 16.4.15 (build 160040015) adaptation.**  
+**OxygenOS 16 / System Launcher 16.6.5 adaptation.**  
 Original project: https://github.com/wizpizz/OnePlusPlusLauncher  
 This fork was adapted for OOS16 by Zhangzong with assistance from OpenClaw.
 
@@ -18,7 +18,7 @@ This fork was adapted for OOS16 by Zhangzong with assistance from OpenClaw.
 
 OnePlusPlusLauncher is an Xposed/LSPosed module for the System Launcher on OxygenOS 16 that hooks into the application using the [YukiHookAPI](https://github.com/HighCapable/YuKiHookAPI) framework. It modifies app drawer search functions: automating keyboard display, enabling instant app launch from search, redirecting search actions to the app drawer, and providing optional fuzzy search.
 
-**Tested on System Launcher 16.4.15 (build 160040015).**
+**Tested on System Launcher 16.6.5 (OnePlus 13, OxygenOS 16).**
 
 **Please star the repository, if you enjoy using the module! It goes a long way ⭐**
 

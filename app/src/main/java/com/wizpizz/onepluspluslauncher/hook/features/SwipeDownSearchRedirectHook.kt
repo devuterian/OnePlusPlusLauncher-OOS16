@@ -64,7 +64,23 @@ object SwipeDownSearchRedirectHook {
                             HookUtils.drawerOpenTime = System.currentTimeMillis()
 
                             cleanupPullDownAnimation(instance, launcher)
-                            HookUtils.setRedirectInProgress(false)
+
+                            val autoFocusSwipeDownEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SWIPE_DOWN_REDIRECT, true)
+                            if (autoFocusSwipeDownEnabled) {
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    try {
+                                        HookUtils.setRedirectInProgress(true)
+                                        appClassLoader?.let { HookUtils.focusSearchInput(launcher, it) }
+                                        Log.d(TAG, "[SwipeDownSearch] Applied auto focus for swipe-down redirect")
+                                    } catch (e: Throwable) {
+                                        Log.e(TAG, "[SwipeDownSearch] Auto focus failed: ${e.message}")
+                                    } finally {
+                                        HookUtils.setRedirectInProgress(false)
+                                    }
+                                }, 280L)
+                            } else {
+                                HookUtils.setRedirectInProgress(false)
+                            }
 
                             // T=300ms: animate blur radius 100 → 0 to reveal search UI.
                             if (blurController != null) {
@@ -121,9 +137,6 @@ object SwipeDownSearchRedirectHook {
                                     } catch (_: Throwable) {}
                                 }, 1500L)
                             }
-
-                            // Let system auto-focus handle keyboard naturally.
-                            // No manual focusSearchInput — avoids keyboard bounce.
 
                             // Trigger history display.
                             if (prefs.getBoolean(PREF_SEARCH_HISTORY_RECENCY, true)) {

@@ -106,7 +106,14 @@ object GlobalSearchRedirectHook {
             if (success) {
                 val autoFocusRedirectEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_REDIRECT, true)
                 if (autoFocusRedirectEnabled) {
-                    focusSearchAfterRedirect(launcherInstance)
+                    HookUtils.setRedirectInProgress(true)
+                    appClassLoader?.let { classLoader ->
+                        try {
+                            HookUtils.focusSearchInput(launcherInstance, classLoader)
+                        } finally {
+                            HookUtils.setRedirectInProgress(false)
+                        }
+                    } ?: HookUtils.setRedirectInProgress(false)
                 } else {
                     // Reset flag immediately if auto focus on redirect is disabled
                     HookUtils.setRedirectInProgress(false)
@@ -136,105 +143,4 @@ object GlobalSearchRedirectHook {
             null
         }
     }
-    
-    /**
-     * Focus search input after redirecting to All Apps
-     */
-    private fun PackageParam.focusSearchAfterRedirect(launcherInstance: Any) {
-        if (launcherInstance !is android.content.Context) return
-        
-        try {
-            // Focus search input immediately after redirect
-            try {
-                // Reset the redirect flag since we're now handling the redirect focus
-                HookUtils.setRedirectInProgress(false)
-                // Get AppsView
-                var appsView = "com.android.launcher3.Launcher".toClass(appClassLoader)
-                    .field { name = "mAppsView" }
-                    .get(instance = launcherInstance)
-                    .any()
-                
-                if (appsView == null) {
-                    appsView = launcherInstance.current().method { name = "getAppsView" }.call()
-                }
-                
-                if (appsView == null) {
-                    Log.e(TAG, "[GlobalSearch] Failed to get AppsView for redirect focus")
-                    return
-                }
-
-                // Get SearchUiManager
-                val searchUiManager = appsView.current().method {
-                    name = "getSearchUiManager"
-                    superClass()
-                }.call()
-                
-                if (searchUiManager == null) {
-                    Log.e(TAG, "[GlobalSearch] Failed to get SearchUiManager for redirect focus")
-                    return
-                }
-
-                // Try to focus search input
-                var searchInputFocused = false
-                
-                // Approach 1: Try getEditText method
-                try {
-                    val editText = searchUiManager.current().method {
-                        name = "getEditText"
-                        superClass()
-                    }.call() as? android.widget.EditText
-                    
-                    if (editText != null) {
-                        editText.requestFocus()
-                        searchInputFocused = true
-                        Log.d(TAG, "[GlobalSearch] Successfully focused search input via getEditText")
-                    }
-                } catch (e: Throwable) {
-                    Log.d(TAG, "[GlobalSearch] getEditText method not available")
-                }
-                
-                // Approach 2: Search for EditText in view hierarchy
-                if (!searchInputFocused && searchUiManager is android.view.ViewGroup) {
-                    val editText = findEditTextInViewGroup(searchUiManager)
-                    if (editText != null) {
-                        editText.requestFocus()
-                        searchInputFocused = true
-                        Log.d(TAG, "[GlobalSearch] Successfully focused search input via view traversal")
-                    }
-                }
-                
-                // Show keyboard
-                searchUiManager.current().method {
-                    name = "showKeyboard"
-                    superClass()
-                }.call()
-                
-                if (!searchInputFocused) {
-                    Log.w(TAG, "[GlobalSearch] Could not focus search input - no suitable method found")
-                }
-                
-            } catch (e: Throwable) {
-                Log.e(TAG, "[GlobalSearch] Error during redirect focus logic: ${e.message}")
-            }
-            
-        } catch (e: Throwable) {
-            Log.e(TAG, "[GlobalSearch] Error setting up redirect focus: ${e.message}")
-        }
-    }
-    
-    /**
-     * Recursively search for EditText in view hierarchy
-     */
-    private fun findEditTextInViewGroup(viewGroup: android.view.ViewGroup): android.widget.EditText? {
-        for (i in 0 until viewGroup.childCount) {
-            when (val child = viewGroup.getChildAt(i)) {
-                is android.widget.EditText -> return child
-                is android.view.ViewGroup -> {
-                    val found = findEditTextInViewGroup(child)
-                    if (found != null) return found
-                }
-            }
-        }
-        return null
-    }
-} 
+}

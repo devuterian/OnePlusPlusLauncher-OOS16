@@ -16,35 +16,77 @@ object SwipeUpAutoFocusHook {
     
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
-            LAUNCHER_CLASS.toClass(appClassLoader).method {
-                name = "onStateSetStart"
-                param(LAUNCHER_STATE_CLASS.toClass(appClassLoader))
-            }.hook {
-                after {
-                    // Check if auto focus on swipe up is enabled
-                    val autoFocusSwipeEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_SWIPE, true)
-                    if (!autoFocusSwipeEnabled) return@after
-                    
-                    // Check if this ALL_APPS transition is from a redirect (not a swipe)
-                    if (HookUtils.isRedirectInProgress()) {
-                        Log.d(TAG, "[AutoFocus] Skipping swipe focus - redirect in progress")
-                        return@after
-                    }
-                    
-                    val launcherInstance = instance
-                    val targetState = args[0] ?: return@after
-                    val allAppsState = LAUNCHER_STATE_CLASS.toClass(appClassLoader)
-                        .field { name = "ALL_APPS" }.get().any() ?: return@after
+            hookStateSetStart()
+            hookStateTransition("onStateSetEnd")
+        }
+    }
 
-                    if (targetState == allAppsState) {
-                        HookUtils.drawerOpenTime = System.currentTimeMillis()
-                        Log.d(TAG, "[AutoFocus] Focusing search input for swipe-up gesture")
-                        appClassLoader?.let { HookUtils.focusSearchInput(launcherInstance, it) }
-                    } else {
-                        HookUtils.drawerCloseTime = System.currentTimeMillis()
-                    }
-                }
+    private fun PackageParam.hookStateSetStart() {
+        val launcherClass = LAUNCHER_CLASS.toClassOrNull(appClassLoader) ?: return
+        val launcherStateClass = LAUNCHER_STATE_CLASS.toClassOrNull(appClassLoader) ?: return
+
+        launcherClass.method {
+            name = "onStateSetStart"
+            param(launcherStateClass)
+        }?.hook {
+            after {
+                val autoFocusSwipeEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_SWIPE, true)
+                handleStateTransition(args.lastOrNull(), instance, appClassLoader, "onStateSetStart/1", autoFocusSwipeEnabled)
             }
+        }
+
+        launcherClass.method {
+            name = "onStateSetStart"
+            param(launcherStateClass, launcherStateClass)
+        }?.hook {
+            after {
+                val autoFocusSwipeEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_SWIPE, true)
+                handleStateTransition(args.lastOrNull(), instance, appClassLoader, "onStateSetStart/2", autoFocusSwipeEnabled)
+            }
+        } ?: Log.d(TAG, "[AutoFocus] onStateSetStart with two params not found")
+    }
+
+    private fun PackageParam.hookStateTransition(methodName: String) {
+        LAUNCHER_CLASS.toClassOrNull(appClassLoader)?.method {
+            name = methodName
+            param(LAUNCHER_STATE_CLASS.toClassOrNull(appClassLoader) ?: return@method)
+        }?.hook {
+            after {
+                val autoFocusSwipeEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_SWIPE, true)
+                handleStateTransition(args.lastOrNull(), instance, appClassLoader, methodName, autoFocusSwipeEnabled)
+            }
+        } ?: Log.d(TAG, "[AutoFocus] $methodName not found")
+    }
+
+    private fun handleStateTransition(
+        targetState: Any?,
+        launcherInstance: Any,
+        classLoader: ClassLoader?,
+        source: String,
+        autoFocusSwipeEnabled: Boolean
+    ) {
+        if (targetState == null || classLoader == null) return
+
+        if (!autoFocusSwipeEnabled) return
+
+        if (HookUtils.isRedirectInProgress()) {
+            Log.d(TAG, "[AutoFocus] Skipping swipe focus - redirect in progress")
+            return
+        }
+
+        val launcherStateClass = LAUNCHER_STATE_CLASS.toClassOrNull(classLoader) ?: return
+        val allAppsState = try {
+            launcherStateClass.field { name = "ALL_APPS" }.get().any()
+        } catch (_: Throwable) {
+            null
+        } ?: return
+
+        if (targetState == allAppsState) {
+            HookUtils.drawerOpenTime = System.currentTimeMillis()
+            Log.d(TAG, "[AutoFocus] Focusing search input via $source")
+            HookUtils.focusSearchInput(launcherInstance, classLoader)
+        } else {
+            HookUtils.drawerCloseTime = System.currentTimeMillis()
         }
     }
 } 

@@ -1,3 +1,20 @@
+# 🚀 OnePlusPlusLauncher v1.3.4-oos16.6.5 Release
+
+## 📝 Changelog
+
+* Compatibility:
+    * Target launcher version updated to **System Launcher 16.6.5** on OxygenOS 16.
+    * Fixed swipe-down redirect auto focus path by wiring `auto_focus_swipe_down_redirect` to real focus logic.
+    * Unified global-search redirect focus with shared `HookUtils.focusSearchInput` retry flow.
+    * Added additional swipe-up state transition hook coverage (`onStateSetStart` overload + `onStateSetEnd`) for launcher API drift.
+    * Added fallback search manager resolution for newer launcher internals.
+
+## ✅ Validation target
+
+* OnePlus 13 / OxygenOS 16 / System Launcher 16.6.5
+
+---
+
 # 🚀 OnePlusPlusLauncher v1.2.1 Release 
 
 ## 📝 Changelog

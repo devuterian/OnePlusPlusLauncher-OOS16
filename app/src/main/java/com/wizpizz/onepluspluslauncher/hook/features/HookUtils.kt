@@ -99,11 +99,8 @@ object HookUtils {
                 return
             }
 
-            // Get SearchUiManager
-            val searchUiManager = appsView.current().method {
-                name = "getSearchUiManager"
-                superClass()
-            }.call()
+            // Get SearchUiManager (launcher internals changed across versions)
+            val searchUiManager = resolveSearchUiManager(appsView)
 
             if (searchUiManager == null) {
                 Log.e(TAG, "[AutoFocus] Failed to get SearchUiManager")
@@ -273,6 +270,50 @@ object HookUtils {
                     if (found != null) return found
                 }
             }
+        }
+        return null
+    }
+
+    /**
+     * Resolve launcher search manager across 16.4.15 and 16.6.5 variants.
+     */
+    private fun resolveSearchUiManager(appsView: Any): Any? {
+        val methodCandidates = listOf(
+            "getSearchUiManager",
+            "getSearchManager",
+            "getSearchContainer"
+        )
+        for (methodName in methodCandidates) {
+            try {
+                val result = appsView.current().method {
+                    name = methodName
+                    superClass()
+                }.call()
+                if (result != null) {
+                    if (methodName != "getSearchUiManager") {
+                        Log.d(TAG, "[AutoFocus] Using fallback manager method: $methodName")
+                    }
+                    return result
+                }
+            } catch (_: Throwable) {}
+        }
+
+        val fieldCandidates = listOf(
+            "mSearchUiManager",
+            "mSearchManager",
+            "mSearchContainer"
+        )
+        for (fieldName in fieldCandidates) {
+            try {
+                val result = appsView.current().field {
+                    name = fieldName
+                    superClass(true)
+                }.get().any()
+                if (result != null) {
+                    Log.d(TAG, "[AutoFocus] Using fallback manager field: $fieldName")
+                    return result
+                }
+            } catch (_: Throwable) {}
         }
         return null
     }

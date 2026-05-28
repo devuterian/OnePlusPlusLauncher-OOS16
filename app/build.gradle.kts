@@ -16,7 +16,7 @@ android {
         versionCode = property.project.app.versionCode
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "SUPPORTED_LAUNCHER_VERSION", "\"16.4.15\"")
+        buildConfigField("String", "SUPPORTED_LAUNCHER_VERSION", "\"16.6.5\"")
     }
 
     signingConfigs {
