@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">OnePlusPlusLauncher</string>
+    <string name="xposed_desc">OnePlus 런처를 강화합니다: 검색 자동 포커스, 엔터 실행, 글로벌 검색 리다이렉트, 퍼지 검색</string>
+    <string name="about_module">이 모듈은 YukiHookAPI를 기반으로 합니다.\n자세히 보기: https://github.com/HighCapable/YuKiHookAPI</string>
+    <string name="module_version">모듈 버전: %s</string>
+    <string name="module_not_activated">비활성화됨</string>
+    <string name="module_is_activated">활성화됨</string>
+
+    <string name="pref_fuzzy_search_title">퍼지 검색 알고리즘 사용</string>
+    <string name="pref_language_title">언어</string>
+    <string name="pref_auto_focus_search_swipe_title">위로 스와이프 시 자동 포커스</string>
+    <string name="pref_auto_focus_search_redirect_title">검색 버튼 리다이렉트 시 자동 포커스</string>
+    <string name="pref_auto_focus_swipe_down_redirect_title">아래로 스와이프 리다이렉트 시 자동 포커스</string>
+    <string name="pref_enter_key_launch_title">엔터 키로 앱 실행</string>
+    <string name="pref_global_search_redirect_title">글로벌 검색 버튼 리다이렉트</string>
+    <string name="pref_swipe_down_search_redirect_title">아래로 스와이프 검색 리다이렉트</string>
+    <string name="pref_left_swipe_discover_redirect_title">왼쪽 스와이프(Google Discover) 리다이렉트</string>
+    <string name="pref_auto_focus_left_swipe_redirect_title">왼쪽 스와이프 리다이렉트 시 자동 포커스</string>
+    <string name="pref_limit_two_rows_search_title">2줄 결과 표시</string>
+    <string name="pref_search_history_recency_title">검색 기록: 최근 순 정렬</string>
+    <string name="pref_search_history_frequency_title">검색 기록: 사용 빈도 순 정렬</string>
+    <string name="feature_settings">기능 설정</string>
+    <string name="category_search_enhancement">검색 강화</string>
+    <string name="category_auto_focus">자동 포커스(키보드 표시)</string>
+    <string name="category_search_redirect">검색 리다이렉트(앱 서랍)</string>
+    <string name="supported_launcher_version">지원 런처 버전: %s</string>
+    <string name="restart_launcher_button">런처 강제 종료 후 재시작</string>
+    <string name="restart_launcher_success">런처를 재시작했습니다.</string>
+    <string name="restart_launcher_failed">런처 재시작에 실패했습니다. root/LSPosed 환경을 확인하세요.</string>
+</resources>

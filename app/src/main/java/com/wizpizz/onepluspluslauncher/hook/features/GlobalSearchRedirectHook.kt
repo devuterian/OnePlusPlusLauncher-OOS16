@@ -109,7 +109,7 @@ object GlobalSearchRedirectHook {
                     HookUtils.setRedirectInProgress(true)
                     appClassLoader?.let { classLoader ->
                         try {
-                            HookUtils.focusSearchInput(launcherInstance, classLoader)
+                            HookUtils.focusSearchInput(launcherInstance, classLoader, smoothMode = true)
                         } finally {
                             HookUtils.setRedirectInProgress(false)
                         }

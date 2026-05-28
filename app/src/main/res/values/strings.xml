@@ -24,4 +24,7 @@
     <string name="category_auto_focus">Auto Focus (Show Keyboard)</string>
     <string name="category_search_redirect">Search Redirect (to app drawer)</string>
     <string name="supported_launcher_version">Supported Launcher Version: %s</string>
+    <string name="restart_launcher_button">Force stop and restart launcher</string>
+    <string name="restart_launcher_success">Launcher restarted.</string>
+    <string name="restart_launcher_failed">Failed to restart launcher. Check root/LSPosed environment.</string>
 </resources>

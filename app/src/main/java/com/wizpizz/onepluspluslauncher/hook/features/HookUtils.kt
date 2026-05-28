@@ -80,7 +80,11 @@ object HookUtils {
      * Focus search input in app drawer.
      * Uses multiple approaches and retries to handle third-party keyboards on OOS16.
      */
-    fun focusSearchInput(launcherInstance: Any, appClassLoader: ClassLoader) {
+    fun focusSearchInput(
+        launcherInstance: Any,
+        appClassLoader: ClassLoader,
+        smoothMode: Boolean = false
+    ) {
         if (launcherInstance !is android.content.Context) return
 
         try {
@@ -202,7 +206,11 @@ object HookUtils {
             try {
                 if (searchUiManager is android.view.View) {
                     val view = searchUiManager
-                    val retryMs = listOf(250L, 400L, 600L, 800L, 1000L)
+                    val retryMs = if (smoothMode) {
+                        listOf(120L, 240L, 360L, 520L)
+                    } else {
+                        listOf(250L, 400L, 600L, 800L, 1000L)
+                    }
                     for (delay in retryMs) {
                         view.postDelayed({
                             try {
@@ -237,7 +245,7 @@ object HookUtils {
                                 if (editText != null) {
                                     imm?.restartInput(editText)
                                 }
-                                val showFlags = if (delay >= 600L) {
+                                val showFlags = if (!smoothMode && delay >= 600L) {
                                     android.view.inputmethod.InputMethodManager.SHOW_FORCED
                                 } else {
                                     android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT

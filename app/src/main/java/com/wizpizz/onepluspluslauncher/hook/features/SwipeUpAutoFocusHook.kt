@@ -84,7 +84,7 @@ object SwipeUpAutoFocusHook {
         if (targetState == allAppsState) {
             HookUtils.drawerOpenTime = System.currentTimeMillis()
             Log.d(TAG, "[AutoFocus] Focusing search input via $source")
-            HookUtils.focusSearchInput(launcherInstance, classLoader)
+            HookUtils.focusSearchInput(launcherInstance, classLoader, smoothMode = true)
         } else {
             HookUtils.drawerCloseTime = System.currentTimeMillis()
         }

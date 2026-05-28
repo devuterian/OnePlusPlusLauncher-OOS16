@@ -70,14 +70,16 @@ object SwipeDownSearchRedirectHook {
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     try {
                                         HookUtils.setRedirectInProgress(true)
-                                        appClassLoader?.let { HookUtils.focusSearchInput(launcher, it) }
+                                        appClassLoader?.let {
+                                            HookUtils.focusSearchInput(launcher, it, smoothMode = true)
+                                        }
                                         Log.d(TAG, "[SwipeDownSearch] Applied auto focus for swipe-down redirect")
                                     } catch (e: Throwable) {
                                         Log.e(TAG, "[SwipeDownSearch] Auto focus failed: ${e.message}")
                                     } finally {
                                         HookUtils.setRedirectInProgress(false)
                                     }
-                                }, 280L)
+                                }, 140L)
                             } else {
                                 HookUtils.setRedirectInProgress(false)
                             }

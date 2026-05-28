@@ -24,4 +24,7 @@
     <string name="category_auto_focus">自动聚焦（显示键盘）</string>
     <string name="category_search_redirect">搜索重定向（到应用抽屉）</string>
     <string name="supported_launcher_version">支持的 Launcher 版本：%s</string>
+    <string name="restart_launcher_button">强制停止并重启启动器</string>
+    <string name="restart_launcher_success">启动器已重启。</string>
+    <string name="restart_launcher_failed">重启失败，请检查 root/LSPosed 环境。</string>
 </resources>

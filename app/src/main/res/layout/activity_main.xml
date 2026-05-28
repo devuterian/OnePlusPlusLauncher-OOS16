@@ -110,6 +110,14 @@
                 android:text="@string/supported_launcher_version"
                 android:textColor="@color/white"
                 android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/restart_launcher_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/restart_launcher_button"
+                android:textAllCaps="false" />
         </LinearLayout>
     </LinearLayout>
 

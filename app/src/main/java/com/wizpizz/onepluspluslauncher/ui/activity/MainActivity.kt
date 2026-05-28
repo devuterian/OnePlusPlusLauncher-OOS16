@@ -21,6 +21,7 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_S
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_LEFT_SWIPE_DISCOVER_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
+import android.widget.Toast
 
 class MainActivity : BaseActivity<ActivityMainBinding>() {
 
@@ -50,6 +51,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         setupFeatureToggle(binding.leftSwipeDiscoverRedirectSwitch, PREF_LEFT_SWIPE_DISCOVER_REDIRECT)
         setupFeatureToggle(binding.autoFocusLeftSwipeRedirectSwitch, PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT)
         setupFeatureToggle(binding.fuzzySearchSwitchNew, PREF_USE_FUZZY_SEARCH)
+        setupRestartLauncherButton()
     }
 
     /**
@@ -93,6 +95,39 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun setupRestartLauncherButton() {
+        binding.restartLauncherButton.setOnClickListener {
+            val success = restartLauncherProcess()
+            Toast.makeText(
+                this,
+                getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun restartLauncherProcess(): Boolean {
+        val commands = listOf(
+            "am force-stop com.android.launcher",
+            "monkey -p com.android.launcher -c android.intent.category.LAUNCHER 1"
+        )
+        return runShellCommands(commands, useRoot = true) || runShellCommands(commands, useRoot = false)
+    }
+
+    private fun runShellCommands(commands: List<String>, useRoot: Boolean): Boolean {
+        return try {
+            val shell = if (useRoot) "su" else "sh"
+            val process = ProcessBuilder(shell).redirectErrorStream(true).start()
+            process.outputStream.bufferedWriter().use { writer ->
+                commands.forEach { writer.write("$it\n") }
+                writer.write("exit\n")
+            }
+            process.waitFor() == 0
+        } catch (_: Throwable) {
+            false
         }
     }
 
