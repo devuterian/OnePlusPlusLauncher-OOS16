@@ -1,7 +1,9 @@
 package com.wizpizz.onepluspluslauncher.hook.features
 
-import android.os.Handler
-import android.os.Looper
+import android.content.ComponentName
+import android.content.Context
+import android.content.pm.LauncherApps
+import android.content.pm.ShortcutInfo
 import android.util.Log
 import com.highcapable.yukihookapi.hook.factory.current
 import com.highcapable.yukihookapi.hook.factory.field
@@ -9,9 +11,11 @@ import com.highcapable.yukihookapi.hook.factory.method
 import com.highcapable.yukihookapi.hook.param.PackageParam
 import com.highcapable.yukihookapi.hook.type.java.BooleanType
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.LAUNCHER_CLASS
+import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_INCLUDE_APP_SHORTCUTS_SEARCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SEARCH_HISTORY_RECENCY
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.TAG
+import java.lang.reflect.Field
 import me.xdrop.fuzzywuzzy.FuzzySearch
 import kotlin.math.roundToInt
 
@@ -23,11 +27,14 @@ object FuzzySearchHook {
     private const val BASE_ADAPTER_ITEM_CLASS =
         "com.android.launcher3.allapps.BaseAllAppsAdapter\$AdapterItem"
     private const val APP_INFO_CLASS = "com.android.launcher3.model.data.AppInfo"
+    private const val WORKSPACE_ITEM_INFO_CLASS = "com.android.launcher3.model.data.WorkspaceItemInfo"
     private const val ARRAY_LIST_CLASS = "java.util.ArrayList"
 
     private const val PREFIX_MATCH_MULTIPLIER = 1.5
     private const val SUBSTRING_MATCH_MULTIPLIER = 1.3
     private const val SUBSEQUENCE_MATCH_MULTIPLIER = 1.1
+    private const val SHORTCUT_MIN_SCORE = 55
+    private const val SHORTCUT_CACHE_WINDOW_MS = 10_000L
 
     // Shared state for SwipeDownSearchRedirectHook coordination
     @Volatile
@@ -40,11 +47,19 @@ object FuzzySearchHook {
     private var historyInjectedTime = 0L
     private const val HISTORY_LOCK_WINDOW_MS = 2000L
 
+    @Volatile
+    private var shortcutCacheTime = 0L
+    @Volatile
+    private var shortcutCache: List<ShortcutInfo> = emptyList()
+
     data class FuzzyMatchResult(
-        val appInfo: Any,
+        val itemInfo: Any,
+        val parentAppInfo: Any?,
+        val isShortcut: Boolean,
         val score: Int,
-        val appName: String,
-        val appNameLower: String
+        val koreanMatchPriority: Int,
+        val directMatchPriority: Int,
+        val appName: String
     )
 
     fun apply(packageParam: PackageParam) {
@@ -64,9 +79,14 @@ object FuzzySearchHook {
 
                     val useFuzzySearch = try { prefs.getBoolean(PREF_USE_FUZZY_SEARCH, true) } catch (_: Throwable) { true }
                     if (!useFuzzySearch) return@before
+                    val includeShortcuts = try {
+                        prefs.getBoolean(PREF_INCLUDE_APP_SHORTCUTS_SEARCH, false)
+                    } catch (_: Throwable) {
+                        false
+                    }
 
                     try {
-                        val sortedResults = performFuzzySearch(instance, sanitizedQuery)
+                        val sortedResults = performFuzzySearch(instance, sanitizedQuery, includeShortcuts)
                         if (sortedResults.isNotEmpty()) {
                             args[1] = sortedResults
                         }
@@ -156,12 +176,17 @@ object FuzzySearchHook {
 
     private fun PackageParam.performFuzzySearch(
         containerInstance: Any,
-        query: String
+        query: String,
+        includeShortcuts: Boolean
     ): ArrayList<Any> {
         val appsList = getAppsListFromContainer(containerInstance) ?: return ArrayList()
         val allAppInfos = getAllAppInfos(appsList) ?: return ArrayList()
-        val scoredResults = scoreSearchResults(allAppInfos, query)
-        return convertToAdapterItems(scoredResults, query)
+        val scoredResults = ArrayList<FuzzyMatchResult>()
+        scoredResults.addAll(scoreSearchResults(allAppInfos, query))
+        if (includeShortcuts) {
+            scoredResults.addAll(scoreShortcutResults(containerInstance, allAppInfos, query))
+        }
+        return convertToAdapterItems(containerInstance, scoredResults)
     }
 
     private fun getAppsListFromContainer(containerInstance: Any): Any? {
@@ -215,9 +240,19 @@ object FuzzySearchHook {
                 val titleField = appInfo?.javaClass?.field { name = "title"; superClass(true) }
                 val appName = titleField?.get(appInfo)?.any()?.toString() ?: ""
                 val appNameLower = appName.lowercase()
-                val score = calculateMatchScore(appNameLower, queryLower)
+                val matchScore = scoreLabel(appNameLower, queryLower, appName, query)
 
-                appInfo?.let { FuzzyMatchResult(it, score, appName, appNameLower) }
+                appInfo?.let {
+                    FuzzyMatchResult(
+                        itemInfo = it,
+                        parentAppInfo = it,
+                        isShortcut = false,
+                        score = matchScore.score,
+                        koreanMatchPriority = matchScore.koreanPriority,
+                        directMatchPriority = matchScore.directPriority,
+                        appName = appName
+                    )
+                }
                     ?.let { scoredResults.add(it) }
             } catch (e: Throwable) {
                 Log.e(TAG, "[FuzzySearch] Error processing app: ${e.message}")
@@ -227,22 +262,95 @@ object FuzzySearchHook {
         return scoredResults
     }
 
-    private fun calculateMatchScore(appNameLower: String, queryLower: String): Int {
+    private fun PackageParam.scoreShortcutResults(
+        containerInstance: Any,
+        appInfos: List<*>,
+        query: String
+    ): List<FuzzyMatchResult> {
+        val context = (containerInstance as? android.view.View)?.context ?: return emptyList()
+        val queryLower = query.lowercase()
+        val parentApps = buildParentAppMap(appInfos)
+        val scoredResults = ArrayList<FuzzyMatchResult>()
+
+        getShortcutInfos(context).forEach { shortcutInfo ->
+            try {
+                val parentAppInfo = parentApps[shortcutInfo.`package`] ?: return@forEach
+                val shortcutLabel = shortcutInfo.longLabel?.toString()
+                    ?: shortcutInfo.shortLabel?.toString()
+                    ?: shortcutInfo.id
+                val shortcutLabelLower = shortcutLabel.lowercase()
+                val matchScore = scoreLabel(shortcutLabelLower, queryLower, shortcutLabel, query)
+                if (
+                    matchScore.score < SHORTCUT_MIN_SCORE &&
+                    matchScore.directPriority == 0 &&
+                    matchScore.koreanPriority == 0
+                ) {
+                    return@forEach
+                }
+
+                scoredResults.add(
+                    FuzzyMatchResult(
+                        itemInfo = shortcutInfo,
+                        parentAppInfo = parentAppInfo,
+                        isShortcut = true,
+                        score = matchScore.score,
+                        koreanMatchPriority = matchScore.koreanPriority,
+                        directMatchPriority = matchScore.directPriority,
+                        appName = shortcutLabel
+                    )
+                )
+            } catch (e: Throwable) {
+                Log.d(TAG, "[FuzzySearch] Error scoring shortcut: ${e.message}")
+            }
+        }
+
+        return scoredResults
+    }
+
+    private data class MatchScore(
+        val score: Int,
+        val koreanPriority: Int,
+        val directPriority: Int
+    )
+
+    private fun scoreLabel(
+        labelLower: String,
+        queryLower: String,
+        rawLabel: String,
+        rawQuery: String
+    ): MatchScore {
+        val koreanMatch = KoreanSearchUtils.score(rawLabel, rawQuery)
+        val directPriority = when {
+            queryLower.isEmpty() -> 0
+            labelLower == queryLower -> 3
+            labelLower.startsWith(queryLower) -> 2
+            labelLower.contains(queryLower) -> 1
+            else -> 0
+        }
+
+        return MatchScore(
+            score = calculateMatchScore(labelLower, queryLower, koreanMatch.score),
+            koreanPriority = koreanMatch.priority,
+            directPriority = directPriority
+        )
+    }
+
+    private fun calculateMatchScore(labelLower: String, queryLower: String, koreanScore: Int): Int {
         val baseScore = try {
-            FuzzySearch.weightedRatio(appNameLower, queryLower)
+            FuzzySearch.weightedRatio(labelLower, queryLower)
         } catch (t: Throwable) {
             0
         }
 
         val multiplier = when {
             queryLower.isEmpty() -> 1.0
-            appNameLower.startsWith(queryLower) -> PREFIX_MATCH_MULTIPLIER
-            appNameLower.contains(queryLower) -> SUBSTRING_MATCH_MULTIPLIER
-            isSubsequence(appNameLower, queryLower) -> SUBSEQUENCE_MATCH_MULTIPLIER
+            labelLower.startsWith(queryLower) -> PREFIX_MATCH_MULTIPLIER
+            labelLower.contains(queryLower) -> SUBSTRING_MATCH_MULTIPLIER
+            isSubsequence(labelLower, queryLower) -> SUBSEQUENCE_MATCH_MULTIPLIER
             else -> 1.0
         }
 
-        return (baseScore * multiplier).roundToInt()
+        return maxOf((baseScore * multiplier).roundToInt(), koreanScore)
     }
 
     private fun isSubsequence(text: String, pattern: String): Boolean {
@@ -259,33 +367,29 @@ object FuzzySearchHook {
     }
 
     private fun PackageParam.convertToAdapterItems(
-        scoredResults: List<FuzzyMatchResult>,
-        query: String
+        containerInstance: Any,
+        scoredResults: List<FuzzyMatchResult>
     ): ArrayList<Any> {
-        val queryLower = query.lowercase()
-
         val sortedResults = scoredResults.sortedWith(
             compareByDescending<FuzzyMatchResult> {
-                when {
-                    it.appNameLower == queryLower -> 3
-                    it.appNameLower.startsWith(queryLower) -> 2
-                    it.appNameLower.contains(queryLower) -> 1
-                    else -> 0
-                }
+                it.koreanMatchPriority
+            }.thenByDescending {
+                it.directMatchPriority
             }.thenByDescending { it.score }
         )
 
         val finalAdapterItems = ArrayList<Any>()
+        val context = (containerInstance as? android.view.View)?.context
         val adapterItemClass = BASE_ADAPTER_ITEM_CLASS.toClass(appClassLoader)
         val appInfoClass = APP_INFO_CLASS.toClass(appClassLoader)
 
         sortedResults.forEach { result ->
             try {
-                val adapterItem = adapterItemClass.method {
-                    name = "asApp"
-                    param(appInfoClass)
-                    modifiers { isStatic }
-                }.get().call(result.appInfo)
+                val adapterItem = if (result.isShortcut && context != null) {
+                    createShortcutAdapterItem(context, adapterItemClass, appInfoClass, result)
+                } else {
+                    createAppAdapterItem(adapterItemClass, appInfoClass, result.itemInfo)
+                }
 
                 if (adapterItem != null) {
                     finalAdapterItems.add(adapterItem)
@@ -296,5 +400,144 @@ object FuzzySearchHook {
         }
 
         return finalAdapterItems
+    }
+
+    private fun createAppAdapterItem(
+        adapterItemClass: Class<*>,
+        appInfoClass: Class<*>,
+        appInfo: Any
+    ): Any? {
+        return adapterItemClass.method {
+            name = "asApp"
+            param(appInfoClass)
+            modifiers { isStatic }
+        }.get().call(appInfo)
+    }
+
+    private fun PackageParam.createShortcutAdapterItem(
+        context: Context,
+        adapterItemClass: Class<*>,
+        appInfoClass: Class<*>,
+        result: FuzzyMatchResult
+    ): Any? {
+        val shortcutInfo = result.itemInfo as? ShortcutInfo ?: return null
+        val parentAppInfo = result.parentAppInfo ?: return null
+        val workspaceItemInfo = createWorkspaceItemInfo(context, shortcutInfo) ?: return null
+
+        val directAdapterItem = try {
+            adapterItemClass.method {
+                name = "asShortcut"
+                param(workspaceItemInfo.javaClass)
+                modifiers { isStatic }
+            }.get().call(workspaceItemInfo)
+        } catch (_: Throwable) {
+            null
+        } ?: try {
+            adapterItemClass.method {
+                name = "asDeepShortcut"
+                param(workspaceItemInfo.javaClass)
+                modifiers { isStatic }
+            }.get().call(workspaceItemInfo)
+        } catch (_: Throwable) {
+            null
+        }
+
+        if (directAdapterItem != null) return directAdapterItem
+
+        return createAppAdapterItem(adapterItemClass, appInfoClass, parentAppInfo)?.also { adapterItem ->
+            setFieldValue(adapterItem, "itemInfo", workspaceItemInfo)
+            setFieldValue(adapterItem, "appInfo", parentAppInfo)
+        }
+    }
+
+    private fun PackageParam.createWorkspaceItemInfo(
+        context: Context,
+        shortcutInfo: ShortcutInfo
+    ): Any? {
+        return try {
+            val workspaceItemInfoClass = WORKSPACE_ITEM_INFO_CLASS.toClass(appClassLoader)
+            workspaceItemInfoClass.getDeclaredConstructor(ShortcutInfo::class.java, Context::class.java)
+                .apply { isAccessible = true }
+                .newInstance(shortcutInfo, context)
+        } catch (e: Throwable) {
+            Log.d(TAG, "[FuzzySearch] Failed to create WorkspaceItemInfo: ${e.message}")
+            null
+        }
+    }
+
+    private fun getShortcutInfos(context: Context): List<ShortcutInfo> {
+        val now = System.currentTimeMillis()
+        if (now - shortcutCacheTime < SHORTCUT_CACHE_WINDOW_MS) return shortcutCache
+
+        val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return emptyList()
+        val shortcuts = ArrayList<ShortcutInfo>()
+        val flags = LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
+
+        launcherApps.profiles.forEach { userHandle ->
+            try {
+                val query = LauncherApps.ShortcutQuery().apply {
+                    setQueryFlags(flags)
+                }
+                launcherApps.getShortcuts(query, userHandle)?.let { shortcuts.addAll(it) }
+            } catch (e: Throwable) {
+                Log.d(TAG, "[FuzzySearch] Failed to query shortcuts for $userHandle: ${e.message}")
+            }
+        }
+
+        return shortcuts.distinctBy { shortcut ->
+            "${shortcut.userHandle.hashCode()}:${shortcut.`package`}:${shortcut.id}"
+        }.also {
+            shortcutCache = it
+            shortcutCacheTime = now
+        }
+    }
+
+    private fun buildParentAppMap(appInfos: List<*>): Map<String, Any> {
+        val parentApps = LinkedHashMap<String, Any>()
+        appInfos.filterNotNull().forEach { appInfo ->
+            val packageName = getAppInfoPackageName(appInfo)
+            if (packageName != null && !parentApps.containsKey(packageName)) {
+                parentApps[packageName] = appInfo
+            }
+        }
+        return parentApps
+    }
+
+    private fun getAppInfoPackageName(appInfo: Any): String? {
+        val componentName = getFieldValue(appInfo, "componentName") as? ComponentName
+            ?: try {
+                appInfo.current().method { name = "getTargetComponent"; superClass(true) }.call() as? ComponentName
+            } catch (_: Throwable) {
+                null
+            }
+        return componentName?.packageName
+    }
+
+    private fun getFieldValue(instance: Any, fieldName: String): Any? {
+        return findField(instance.javaClass, fieldName)?.let { field ->
+            field.isAccessible = true
+            field.get(instance)
+        }
+    }
+
+    private fun setFieldValue(instance: Any, fieldName: String, value: Any?) {
+        findField(instance.javaClass, fieldName)?.let { field ->
+            field.isAccessible = true
+            field.set(instance, value)
+        }
+    }
+
+    private fun findField(clazz: Class<*>, fieldName: String): Field? {
+        var current: Class<*>? = clazz
+        while (current != null) {
+            try {
+                return current.getDeclaredField(fieldName)
+            } catch (_: NoSuchFieldException) {
+                current = current.superclass
+            }
+        }
+        return null
     }
 }

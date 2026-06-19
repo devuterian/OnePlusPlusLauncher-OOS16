@@ -1,54 +1,74 @@
 <div align="center">
 
-# OnePlusPlusLauncher
+# SearchUp
 
-**OxygenOS 16 / System Launcher 16.6.5 adaptation.**  
-Original project: https://github.com/wizpizz/OnePlusPlusLauncher  
-This fork was adapted for OOS16 by Zhangzong with assistance from OpenClaw.
+**Swipe up. Search immediately.**
 
-## LSPosed Module for OnePlus System Launcher
+LSPosed module for the OnePlus / OxygenOS 16 System Launcher.
+
+![GitHub Release](https://img.shields.io/github/v/release/devuterian/OnePlusPlusLauncher-OOS16?style=for-the-badge)
+![GitHub License](https://img.shields.io/github/license/devuterian/OnePlusPlusLauncher-OOS16?style=for-the-badge)
+![GitHub Downloads](https://img.shields.io/github/downloads/devuterian/OnePlusPlusLauncher-OOS16/total?style=for-the-badge)
 
 </div>
 
-![GitHub Release](https://img.shields.io/github/v/release/zhangbaoshengrio/OnePlusPlusLauncher-OOS16?style=for-the-badge)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/zhangbaoshengrio/OnePlusPlusLauncher-OOS16/debug_build.yml?style=for-the-badge&label=DEBUG%20BUILD)
-![GitHub License](https://img.shields.io/github/license/zhangbaoshengrio/OnePlusPlusLauncher-OOS16?style=for-the-badge)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/zhangbaoshengrio/OnePlusPlusLauncher-OOS16/total?style=for-the-badge)
-![GitHub Repo stars](https://img.shields.io/github/stars/zhangbaoshengrio/OnePlusPlusLauncher-OOS16?style=for-the-badge)
+SearchUp makes the OxygenOS 16 app drawer behave like a fast launcher search surface: swipe up from the home screen, land directly in search, type in Korean or English, and launch the result you wanted.
 
-OnePlusPlusLauncher is an Xposed/LSPosed module for the System Launcher on OxygenOS 16 that hooks into the application using the [YukiHookAPI](https://github.com/HighCapable/YuKiHookAPI) framework. It modifies app drawer search functions: automating keyboard display, enabling instant app launch from search, redirecting search actions to the app drawer, and providing optional fuzzy search.
+This project is based on [OnePlusPlusLauncher](https://github.com/wizpizz/OnePlusPlusLauncher), adapted for OxygenOS 16 and continued as SearchUp for faster app drawer search.
 
-**Tested on System Launcher 16.6.5 (OnePlus 13, OxygenOS 16).**
+## Compatibility
 
-**Please star the repository, if you enjoy using the module! It goes a long way ⭐**
+- Tested target: OnePlus System Launcher `16.6.5`
+- Tested device base: OnePlus 13 / OxygenOS 16
+- Requires root and LSPosed
+- LSPosed scope: enable System Launcher
 
-## 📦 Installation
+Launcher updates can break hooks. If SearchUp stops working after a System Launcher update, check the release notes before updating.
 
-**Before downloading, please check the release notes of the version you are downloading to see if it is compatible with your launcher version.**
+## Features
 
-1. Make sure your device is rooted and you have LSPosed installed.
-2. Download the latest release APK (or any other older release) from the [releases page](https://github.com/zhangbaoshengrio/OnePlusPlusLauncher-OOS16/releases)
-3. Install the APK on your device.
-4. Enable the module in the LSPosed manager and make sure System Launcher is enabled in the scope settings.
-5. Restart System Launcher.
+- **Swipe-up search focus:** opens app drawer search and shows the keyboard automatically.
+- **Gesture-back cleanup:** when search is open, one back gesture closes the keyboard and search surface together.
+- **Korean fuzzy search:** supports Hangul syllable search and initial-consonant search such as `ㅋㅌ` for Korean app names.
+- **App shortcut search:** optionally includes launcher shortcuts from long-press app menus in search results.
+- **Enter to launch:** launches the first search result from the keyboard action key.
+- **Search redirects:** redirects global search, swipe-down search, and left-swipe Discover gestures into app drawer search.
+- **Launcher restart:** includes an in-app action and app shortcut to restart System Launcher after changing options.
+- **Localized settings:** Korean Android locales show natural Korean UI text.
 
-(Restarting the launcher may be necessary for changes to take effect after toggling features.)
+## Installation
 
-## ⚡ Features
+1. Install the latest APK from [Releases](https://github.com/devuterian/OnePlusPlusLauncher-OOS16/releases).
+2. Enable SearchUp in LSPosed.
+3. Add System Launcher to the module scope.
+4. Restart System Launcher from the SearchUp app or from LSPosed.
 
-* ⌨️ **Automatic Keyboard / Searchbar Focus:** Automatically displays the keyboard when the app drawer is opened and search is focused. Can be toggled separately for opening app drawer by swiping up or redirecting from the Global Search Button.
-* ↩️ **App Launch on Enter:** Launches the first search result directly when the "Enter" key or search action button on the keyboard is pressed.
-* 🔎 **Global Search Button Redirect:** Intercepts the search button in the homescreen that would normally open the dedicated global search app, redirecting to the main app drawer instead.
-* 📱 **Swipe Down Search Redirect:** Intercepts swipe down search gestures and redirects them to the app drawer instead of the default search interface. Includes optional auto focus for seamless search experience.
-* 🍑 **Fuzzy Search:** Replaces the default search logic with a ranked fuzzy search algorithm for more flexible matching.
-* ⚙️ **Configuration UI:** Allows toggling features individually, including auto focus options for different interaction methods.
+## Recommended Settings
 
-## 🔮 To-Do
+For the SearchUp-style flow, enable:
 
-* Rewrite the module UI using Jetpack Compose instead of the current Android Views/XML implementation.
-* A decent app icon 
-* And many other refactorings and improvements...
+- Auto Focus on Swipe Up
+- Use Fuzzy Search Algorithm
+- Search App Shortcuts, if you want app long-press shortcuts to appear in search
 
-## 🔧 Troubleshooting / Known Issues
+## Build
 
-*   **Compatibility / Launcher Updates:** Launcher updates may break hooks. Class names, field names, or method signatures might change, requiring updates to the module.
+```bash
+./gradlew assembleRelease
+```
+
+Release signing reads these values from the environment or a local `.env` file:
+
+```text
+SIGNING_KEY_STORE_PATH=
+SIGNING_KEY_ALIAS=
+SIGNING_KEY_STORE_PASSWORD=
+SIGNING_KEY_PASSWORD=
+```
+
+## Credits
+
+- Original module: [wizpizz/OnePlusPlusLauncher](https://github.com/wizpizz/OnePlusPlusLauncher)
+- OxygenOS 16 adaptation: [zhangbaoshengrio/OnePlusPlusLauncher-OOS16](https://github.com/zhangbaoshengrio/OnePlusPlusLauncher-OOS16)
+- Maintained release fork: [devuterian/OnePlusPlusLauncher-OOS16](https://github.com/devuterian/OnePlusPlusLauncher-OOS16)
+- Built with [YukiHookAPI](https://github.com/HighCapable/YuKiHookAPI)

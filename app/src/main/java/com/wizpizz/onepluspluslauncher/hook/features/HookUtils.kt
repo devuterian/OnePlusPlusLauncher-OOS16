@@ -17,6 +17,7 @@ object HookUtils {
 
     // Preference keys
     const val PREF_USE_FUZZY_SEARCH = "use_fuzzy_search"
+    const val PREF_INCLUDE_APP_SHORTCUTS_SEARCH = "include_app_shortcuts_search"
     const val PREF_AUTO_FOCUS_SEARCH_SWIPE = "auto_focus_search_swipe"
     const val PREF_AUTO_FOCUS_SEARCH_REDIRECT = "auto_focus_search_redirect"
     const val PREF_AUTO_FOCUS_SWIPE_DOWN_REDIRECT = "auto_focus_swipe_down_redirect"
@@ -125,6 +126,7 @@ object HookUtils {
                 if (editText != null) {
                     editText.isFocusable = true
                     editText.isFocusableInTouchMode = true
+                    editText.showSoftInputOnFocus = true
                     editText.requestFocus()
                     editText.requestFocusFromTouch()
                     editText.performClick()
@@ -142,6 +144,7 @@ object HookUtils {
                 if (editText != null) {
                     editText.isFocusable = true
                     editText.isFocusableInTouchMode = true
+                    editText.showSoftInputOnFocus = true
                     editText.requestFocus()
                     editText.requestFocusFromTouch()
                     editText.performClick()
@@ -157,6 +160,7 @@ object HookUtils {
                 if (editText != null) {
                     editText.isFocusable = true
                     editText.isFocusableInTouchMode = true
+                    editText.showSoftInputOnFocus = true
                     editText.requestFocus()
                     editText.requestFocusFromTouch()
                     editText.performClick()
@@ -207,7 +211,7 @@ object HookUtils {
                 if (searchUiManager is android.view.View) {
                     val view = searchUiManager
                     val retryMs = if (smoothMode) {
-                        listOf(120L, 240L, 360L, 520L)
+                        listOf(120L, 240L, 360L, 520L, 760L, 1000L)
                     } else {
                         listOf(250L, 400L, 600L, 800L, 1000L)
                     }
@@ -229,6 +233,7 @@ object HookUtils {
 
                                 editText?.isFocusable = true
                                 editText?.isFocusableInTouchMode = true
+                                editText?.showSoftInputOnFocus = true
                                 editText?.requestFocus()
                                 editText?.requestFocusFromTouch()
                                 editText?.performClick()
@@ -245,7 +250,7 @@ object HookUtils {
                                 if (editText != null) {
                                     imm?.restartInput(editText)
                                 }
-                                val showFlags = if (!smoothMode && delay >= 600L) {
+                                val showFlags = if (delay >= 600L) {
                                     android.view.inputmethod.InputMethodManager.SHOW_FORCED
                                 } else {
                                     android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT
@@ -265,6 +270,106 @@ object HookUtils {
             Log.e(TAG, "[AutoFocus] Error during focus logic: ${e.message}")
         }
     }
+
+    /**
+     * Gently focuses the drawer search input for swipe-up entry.
+     *
+     * OOS16 already enters drawer/search mode from OplusLauncherAllAppsContainerView.onScrollUpEnd().
+     * For swipe-up, avoid performClick(), SHOW_FORCED, and long retry queues because those can race
+     * with the launcher's own IME/back-key state machine.
+     */
+    fun focusSearchInputOnce(
+        launcherInstance: Any,
+        appClassLoader: ClassLoader
+    ) {
+        if (launcherInstance !is android.content.Context) return
+
+        try {
+            var appsView = LAUNCHER_CLASS.toClass(appClassLoader)
+                .field { name = "mAppsView" }
+                .get(instance = launcherInstance)
+                .any()
+
+            if (appsView == null) {
+                appsView = launcherInstance.current().method { name = "getAppsView" }.call()
+            }
+
+            if (appsView == null) {
+                Log.e(TAG, "[AutoFocus] Failed to get AppsView")
+                return
+            }
+
+            val searchUiManager = resolveSearchUiManager(appsView)
+            if (searchUiManager == null) {
+                Log.e(TAG, "[AutoFocus] Failed to get SearchUiManager")
+                return
+            }
+
+            val editText = resolveSearchEditText(searchUiManager, appsView)
+
+            if (!isSearchUiInEditState(searchUiManager)) {
+                if (enterSearchMode(searchUiManager)) {
+                    Log.d(TAG, "[AutoFocus] Entered drawer search mode")
+                    return
+                }
+            }
+
+            if (editText != null && !editText.hasFocus()) {
+                editText.isFocusable = true
+                editText.isFocusableInTouchMode = true
+                editText.showSoftInputOnFocus = true
+                editText.requestFocus()
+            }
+
+            try {
+                searchUiManager.current().method {
+                    name = "showKeyboard"
+                    superClass()
+                }.call()
+            } catch (_: Throwable) {}
+
+            val targetView = (editText ?: searchUiManager as? android.view.View) ?: return
+            targetView.postDelayed({
+                try {
+                    val imm = targetView.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                    if (editText != null && editText.hasWindowFocus()) {
+                        imm?.showSoftInput(editText, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                    }
+                    Log.d(TAG, "[AutoFocus] Gentle swipe keyboard request")
+                } catch (e: Throwable) {
+                    Log.d(TAG, "[AutoFocus] Gentle swipe keyboard request failed: ${e.message}")
+                }
+            }, 80L)
+        } catch (e: Throwable) {
+            Log.e(TAG, "[AutoFocus] Error during gentle focus logic: ${e.message}")
+        }
+    }
+
+    fun isSearchModeActive(
+        launcherInstance: Any,
+        appClassLoader: ClassLoader
+    ): Boolean {
+        val searchUiManager = getSearchUiManager(launcherInstance, appClassLoader) ?: return false
+        return isSearchUiInEditState(searchUiManager)
+    }
+
+    fun resetSearchModeIfActive(
+        launcherInstance: Any,
+        appClassLoader: ClassLoader
+    ): Boolean {
+        val searchUiManager = getSearchUiManager(launcherInstance, appClassLoader) ?: return false
+        if (!isSearchUiInEditState(searchUiManager)) return false
+        return try {
+            searchUiManager.current().method {
+                name = "resetSearch"
+                superClass()
+            }.call()
+            true
+        } catch (e: Throwable) {
+            Log.d(TAG, "[AutoFocus] resetSearch failed: ${e.message}")
+            false
+        }
+    }
     
     /**
      * Recursively search for EditText in view hierarchy
@@ -280,6 +385,72 @@ object HookUtils {
             }
         }
         return null
+    }
+
+    private fun getSearchUiManager(launcherInstance: Any, appClassLoader: ClassLoader): Any? {
+        return try {
+            var appsView = LAUNCHER_CLASS.toClass(appClassLoader)
+                .field { name = "mAppsView" }
+                .get(instance = launcherInstance)
+                .any()
+
+            if (appsView == null) {
+                appsView = launcherInstance.current().method { name = "getAppsView" }.call()
+            }
+
+            if (appsView == null) null else resolveSearchUiManager(appsView)
+        } catch (e: Throwable) {
+            Log.d(TAG, "[AutoFocus] getSearchUiManager failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun resolveSearchEditText(searchUiManager: Any, appsView: Any): android.widget.EditText? {
+        try {
+            val editText = searchUiManager.current().method {
+                name = "getEditText"
+                superClass()
+            }.call() as? android.widget.EditText
+            if (editText != null) return editText
+        } catch (_: Throwable) {}
+
+        if (searchUiManager is android.view.ViewGroup) {
+            val editText = findEditTextInViewGroup(searchUiManager)
+            if (editText != null) return editText
+        }
+
+        return if (appsView is android.view.ViewGroup) {
+            findEditTextInViewGroup(appsView)
+        } else {
+            null
+        }
+    }
+
+    private fun isSearchUiInEditState(searchUiManager: Any): Boolean {
+        return try {
+            searchUiManager.current().method {
+                name = "isInEditState"
+                superClass()
+            }.call() as? Boolean ?: false
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun enterSearchMode(searchUiManager: Any): Boolean {
+        val methodCandidates = listOf("onSearchBarClickInternal", "onSearchBarClick")
+        for (methodName in methodCandidates) {
+            try {
+                searchUiManager.current().method {
+                    name = methodName
+                    superClass()
+                }.call()
+                return true
+            } catch (e: Throwable) {
+                Log.d(TAG, "[AutoFocus] $methodName unavailable: ${e.message}")
+            }
+        }
+        return false
     }
 
     /**
@@ -468,4 +639,4 @@ fun String.toClassOrNull(classLoader: ClassLoader): Class<*>? {
     } catch (e: ClassNotFoundException) {
         null
     }
-} 
+}

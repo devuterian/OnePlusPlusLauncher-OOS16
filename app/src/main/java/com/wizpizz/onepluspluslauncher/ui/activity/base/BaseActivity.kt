@@ -40,7 +40,11 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
             isAppearanceLightStatusBars = isNotSystemInDarkMode
             isAppearanceLightNavigationBars = isNotSystemInDarkMode
         }
-        val surface = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface)
+        val surface = MaterialColors.getColor(
+            this,
+            com.google.android.material.R.attr.colorSurface,
+            android.graphics.Color.TRANSPARENT
+        )
         window.statusBarColor = surface
         window.navigationBarColor = surface
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

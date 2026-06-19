@@ -9,8 +9,5 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
         <item name="android:windowLightNavigationBar">?attr/isLightTheme</item>
-        <item name="shapeAppearanceCornerExtraLarge">28dp</item>
-        <item name="shapeAppearanceCornerLarge">20dp</item>
-        <item name="shapeAppearanceCornerMedium">16dp</item>
     </style>
 </resources>

@@ -12,5 +12,5 @@ plugins {
 sweetProperty {
     rootProject { all { isEnable = false } }
 }
-rootProject.name = "OnePlusPlusLauncher"
+rootProject.name = "SearchUp"
 include(":app")

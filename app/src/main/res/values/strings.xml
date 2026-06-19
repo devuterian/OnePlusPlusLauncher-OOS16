@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">OnePlusPlusLauncher</string>
+    <string name="app_name">SearchUp</string>
     <string name="xposed_desc">Enhanced OnePlus Launcher with auto focus search, enter key app launching, global search redirect, and fuzzy search features</string>
     <string name="about_module">This module is made by YukiHookAPI. \nLearn more https://github.com/HighCapable/YuKiHookAPI</string>
     <string name="module_version">Module Version: %s</string>
@@ -7,6 +7,7 @@
     <string name="module_is_activated">Activated</string>
 
     <string name="pref_fuzzy_search_title">Use Fuzzy Search Algorithm</string>
+    <string name="pref_include_app_shortcuts_search_title">Search App Shortcuts</string>
     <string name="pref_language_title">Language</string>
     <string name="pref_auto_focus_search_swipe_title">Auto Focus on Swipe Up</string>
     <string name="pref_auto_focus_search_redirect_title">Auto Focus on Search Button Redirect</string>
@@ -20,6 +21,7 @@
     <string name="pref_search_history_recency_title">Search History: Sort by Recent</string>
     <string name="pref_search_history_frequency_title">Search History: Sort by Frequency</string>
     <string name="feature_settings">Feature settings</string>
+    <string name="category_language">Language</string>
     <string name="category_search_enhancement">Search Enhancement</string>
     <string name="category_auto_focus">Auto Focus (Show Keyboard)</string>
     <string name="category_search_redirect">Search Redirect (to app drawer)</string>
@@ -27,4 +29,8 @@
     <string name="restart_launcher_button">Force stop and restart launcher</string>
     <string name="restart_launcher_success">Launcher restarted.</string>
     <string name="restart_launcher_failed">Failed to restart launcher. Check root/LSPosed environment.</string>
+    <string name="shortcut_restart_launcher_short">Restart launcher</string>
+    <string name="shortcut_restart_launcher_long">Force stop and restart launcher</string>
+    <string name="shortcut_open_settings_short">Open settings</string>
+    <string name="shortcut_open_settings_long">Open SearchUp settings</string>
 </resources>

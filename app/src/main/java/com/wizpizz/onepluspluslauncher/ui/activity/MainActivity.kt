@@ -17,6 +17,7 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_S
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_SWIPE_DOWN_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_ENTER_KEY_LAUNCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_GLOBAL_SEARCH_REDIRECT
+import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_INCLUDE_APP_SHORTCUTS_SEARCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_LEFT_SWIPE_DISCOVER_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_SEARCH_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
@@ -29,7 +30,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     private companion object {
         private const val TAG = "OPPLauncherUI"
         private const val LAUNCHER_PACKAGE = "com.android.launcher"
-        private const val GITHUB_URL = "https://github.com/zhangbaoshengrio/OnePlusPlusLauncher-OOS16"
+        private const val ACTION_RESTART_LAUNCHER =
+            "com.wizpizz.onepluspluslauncher.action.RESTART_LAUNCHER"
+        private const val GITHUB_URL = "https://github.com/devuterian/OnePlusPlusLauncher-OOS16"
     }
 
     private val prefs: YukiHookPrefsBridge by lazy { prefs() }
@@ -51,7 +54,15 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         setupFeatureToggle(binding.leftSwipeDiscoverRedirectSwitch, PREF_LEFT_SWIPE_DISCOVER_REDIRECT)
         setupFeatureToggle(binding.autoFocusLeftSwipeRedirectSwitch, PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT)
         setupFeatureToggle(binding.fuzzySearchSwitchNew, PREF_USE_FUZZY_SEARCH)
+        setupFeatureToggle(binding.includeAppShortcutsSearchSwitch, PREF_INCLUDE_APP_SHORTCUTS_SEARCH, false)
         setupRestartLauncherButton()
+        handleShortcutIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcutIntent(intent)
     }
 
     private fun setupToolbar() {
@@ -66,8 +77,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         }
     }
 
-    private fun setupFeatureToggle(switch: MaterialSwitch, prefKey: String) {
-        switch.isChecked = prefs.getBoolean(prefKey, true)
+    private fun setupFeatureToggle(switch: MaterialSwitch, prefKey: String, defaultValue: Boolean = true) {
+        switch.isChecked = prefs.getBoolean(prefKey, defaultValue)
         switch.setOnCheckedChangeListener { button, isChecked ->
             if (button.isPressed) {
                 prefs.native().edit { putBoolean(prefKey, isChecked) }
@@ -98,13 +109,23 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     private fun setupRestartLauncherButton() {
         binding.restartLauncherButton.setOnClickListener {
-            val success = restartLauncherProcess()
-            Toast.makeText(
-                this,
-                getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
-                Toast.LENGTH_SHORT
-            ).show()
+            restartLauncherWithToast()
         }
+    }
+
+    private fun handleShortcutIntent(incomingIntent: Intent?) {
+        if (incomingIntent?.action == ACTION_RESTART_LAUNCHER) {
+            binding.root.post { restartLauncherWithToast() }
+        }
+    }
+
+    private fun restartLauncherWithToast() {
+        val success = restartLauncherProcess()
+        Toast.makeText(
+            this,
+            getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun restartLauncherProcess(): Boolean {
