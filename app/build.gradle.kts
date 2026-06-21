@@ -1,71 +1,50 @@
+import java.util.Properties
+
 plugins {
-    autowire(libs.plugins.android.application)
-    autowire(libs.plugins.kotlin.android)
-    autowire(libs.plugins.kotlin.ksp)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
 }
 
+fun prop(name: String) = providers.gradleProperty(name).get()
+fun intProp(name: String) = prop(name).toInt()
+fun stringProp(name: String) = prop(name).trim('"')
+
 android {
-    namespace = property.project.app.packageName
-    compileSdk = property.project.android.compileSdk
+    namespace = prop("project.app.packageName")
+    compileSdk = intProp("project.android.compileSdk")
 
     defaultConfig {
-        applicationId = property.project.app.packageName
-        minSdk = property.project.android.minSdk
-        targetSdk = property.project.android.targetSdk
-        versionName = property.project.app.versionName
-        versionCode = property.project.app.versionCode
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        applicationId = prop("project.app.packageName")
+        minSdk = intProp("project.android.minSdk")
+        targetSdk = intProp("project.android.targetSdk")
+        versionName = stringProp("project.app.versionName")
+        versionCode = intProp("project.app.versionCode")
 
         buildConfigField("String", "SUPPORTED_LAUNCHER_VERSION", "\"16.6.5\"")
     }
 
     signingConfigs {
-        // Read from environment first; if missing, read from a local .env file (ignored by Git)
         val env = System.getenv()
-        val dotEnvFile = rootProject.file(".env")
-        val dotEnv: Map<String, String> = if (dotEnvFile.exists()) {
-            dotEnvFile.readLines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
-                .associate { line ->
-                    val idx = line.indexOf('=')
-                    val key = line.substring(0, idx).trim()
-                    var value = line.substring(idx + 1).trim()
-                    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
-                        value = value.substring(1, value.length - 1)
-                    }
-                    key to value
-                }
-        } else emptyMap()
+        val dotEnv = Properties().apply {
+            rootProject.file(".env").takeIf { it.exists() }?.inputStream()?.use(::load)
+        }
 
-        fun readSecret(name: String): String? = env[name] ?: dotEnv[name]
+        fun readSecret(name: String): String? = env[name] ?: dotEnv.getProperty(name)?.trim('"', '\'')
 
         val ksPath = readSecret("SIGNING_KEY_STORE_PATH")
         val ksAlias = readSecret("SIGNING_KEY_ALIAS")
         val ksStorePassword = readSecret("SIGNING_KEY_STORE_PASSWORD")
         val ksKeyPassword = readSecret("SIGNING_KEY_PASSWORD")
 
-        create("release"){
+        create("release") {
             if (!ksPath.isNullOrEmpty() && !ksAlias.isNullOrEmpty() && !ksStorePassword.isNullOrEmpty() && !ksKeyPassword.isNullOrEmpty()) {
-                storeFile = (ksPath as Any?)?.let { file(it) }
+                storeFile = file(ksPath)
                 storePassword = ksStorePassword
                 keyAlias = ksAlias
                 keyPassword = ksKeyPassword
             } else {
-                println(
-                    """
-                        
-                          _    _  _____ _____ _   _  _____      _____  ______ ____  _    _  _____      _  __________     __
-                         | |  | |/ ____|_   _| \ | |/ ____|    |  __ \|  ____|  _ \| |  | |/ ____|    | |/ /  ____\ \   / /
-                         | |  | | (___   | | |  \| | |  __     | |  | | |__  | |_) | |  | | |  __     | ' /| |__   \ \_/ / 
-                         | |  | |\___ \  | | | . ` | | |_ |    | |  | |  __| |  _ <| |  | | | |_ |    |  < |  __|   \   /  
-                         | |__| |____) |_| |_| |\  | |__| |    | |__| | |____| |_) | |__| | |__| |    | . \| |____   | |   
-                          \____/|_____/|_____|_| \_|\_____|    |_____/|______|____/ \____/ \_____|    |_|\_\______|  |_|   
-                                                                                                                           
-                                                                                                                           
-
-                    """.trimIndent()
-                )
+                logger.lifecycle("Release signing skipped: SIGNING_KEY_* values are incomplete.")
             }
         }
     }
@@ -78,7 +57,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Use the signing configuration
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -99,23 +77,14 @@ android {
         viewBinding = true
     }
     lint { checkReleaseBuilds = false }
-    // TODO Please visit https://highcapable.github.io/YukiHookAPI/en/api/special-features/host-inject
-    // TODO 请参考 https://highcapable.github.io/YukiHookAPI/zh-cn/api/special-features/host-inject
-    // androidResources.additionalParameters += listOf("--allow-reserved-package-id", "--package-id", "0x64")
 }
 
 dependencies {
-    compileOnly(de.robv.android.xposed.api)
-    implementation(com.highcapable.yukihookapi.api)
-    ksp(com.highcapable.yukihookapi.ksp.xposed)
-    implementation(com.github.duanhong169.drawabletoolbox)
-    implementation(androidx.core.core.ktx)
-    implementation(androidx.appcompat.appcompat)
-    implementation(com.google.android.material.material)
-    implementation(androidx.constraintlayout.constraintlayout)
-    implementation(androidx.coordinatorlayout.coordinatorlayout)
-    testImplementation(junit.junit)
-    androidTestImplementation(androidx.test.ext.junit)
-    androidTestImplementation(androidx.test.espresso.espresso.core)
-    implementation(me.xdrop.fuzzywuzzy)
+    compileOnly("de.robv.android.xposed:api:82")
+    implementation("com.highcapable.yukihookapi:api:1.2.1")
+    ksp("com.highcapable.yukihookapi:ksp-xposed:1.2.1")
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("com.google.android.material:material:1.12.0")
+    testImplementation("junit:junit:4.13.2")
+    implementation("me.xdrop:fuzzywuzzy:1.4.0")
 }

@@ -104,12 +104,13 @@ object GlobalSearchRedirectHook {
             
             // If redirect was successful and auto focus on redirect is enabled, focus search
             if (success) {
+                FuzzySearchHook.lastRedirectTime = System.currentTimeMillis()
                 val autoFocusRedirectEnabled = prefs.getBoolean(PREF_AUTO_FOCUS_SEARCH_REDIRECT, true)
                 if (autoFocusRedirectEnabled) {
                     HookUtils.setRedirectInProgress(true)
                     appClassLoader?.let { classLoader ->
                         try {
-                            HookUtils.focusSearchInput(launcherInstance, classLoader, smoothMode = true)
+                            HookUtils.focusSearchInputOnce(launcherInstance, classLoader)
                         } finally {
                             HookUtils.setRedirectInProgress(false)
                         }

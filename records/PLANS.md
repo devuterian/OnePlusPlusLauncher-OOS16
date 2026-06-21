@@ -1,4 +1,4 @@
-# OnePlusPlusLauncher OOS16 Plans
+# SearchUp OOS16 Plans
 
 ## Planning Rules
 
@@ -8,21 +8,21 @@
 
 ## Approved Directions
 
-### OOS16 Launcher 16.6.5 Compatibility Recovery
+### Settings Surface Simplification
 
-- Outcome: working keyboard focus and redirect behavior for swipe up, search-button redirect, and swipe-down redirect.
-- Why this is accepted: current production behavior is broken on target device/software.
-- Expected value: restores core module value and reduces user breakage reports.
-- Preconditions: verified method signatures from launcher 16.6.5 and on-device LSPosed test loop.
+- Outcome: the app settings screen presents the recommended SearchUp flow first and keeps redirects/focus edge cases as advanced controls.
+- Why this is accepted: the module's value is simple, but the old settings surface exposed implementation details too early.
+- Expected value: less setup confusion and fewer wrong-toggle states.
+- Preconditions: local build and quick on-device sanity check.
 - Earliest likely start: immediate
-- Related ids: upcoming `RSH-*`
+- Related ids: none
 
-### Distribution and CI Stabilization
+### Distribution Sanity
 
-- Outcome: forked repository with reliable debug APK artifacts from GitHub Actions.
-- Why this is accepted: hotfixes need a repeatable delivery path.
-- Expected value: faster validation cycles and easier tester distribution.
-- Preconditions: origin remote access and successful workflow run.
+- Outcome: release notes and APK naming match the SearchUp brand and tested launcher version.
+- Why this is accepted: users should not have to infer whether a build is current for their launcher.
+- Expected value: clearer upgrades and easier rollback when launcher updates break hooks.
+- Preconditions: release build plus target-device validation.
 - Earliest likely start: immediate
 - Related ids: none
 
@@ -30,21 +30,21 @@
 
 ### Near Term
 
-- Initiative:
-  - Why now: unblock broken user-facing behavior on OnePlus 13.
-  - Dependencies: adb device connectivity, launcher package extraction.
-  - Related ids: `RSH-*` (to be created)
+- Initiative: finish settings wording/grouping cleanup.
+  - Why now: it is the cheapest way to make the existing feature set feel intentional.
+  - Dependencies: local build.
+  - Related ids: none
 
 ### Mid Term
 
-- Initiative:
-  - Why later: after hotfix validation, align release workflow and tag strategy.
-  - Dependencies: signing secrets and release notes update.
+- Initiative: keep compatibility notes current per launcher release.
+  - Why later: only matters when a new launcher build or public APK is shipped.
+  - Dependencies: adb device validation and release notes update.
   - Related ids: none
 
 ### Deferred But Accepted
 
-- Initiative:
-  - Why deferred: compose UI rewrite is non-critical versus compatibility fixes.
-  - Revisit trigger: after stable 16.6.5 release and low bug backlog.
+- Initiative: full settings-app redesign.
+  - Why deferred: current XML screen is enough after copy and grouping cleanup.
+  - Revisit trigger: repeated user confusion that wording cannot fix.
   - Related ids: none

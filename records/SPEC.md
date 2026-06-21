@@ -1,23 +1,25 @@
-# OnePlusPlusLauncher OOS16 Spec
+# SearchUp OOS16 Spec
 
-- Project: OnePlusPlusLauncher OOS16 (devuterian fork)
+- Project: SearchUp / OnePlusPlusLauncher OOS16 (devuterian fork)
 - Canonical repo: https://github.com/devuterian/OnePlusPlusLauncher-OOS16
 - Upstream repo: https://github.com/zhangbaoshengrio/OnePlusPlusLauncher-OOS16
 - Project id: oenpluspluslauncher
 - Operator: devuterian
-- Last updated: 2026-05-28
+- Last updated: 2026-06-21
 
 ## Project Thesis
 
-This project maintains an LSPosed module for OnePlus System Launcher on OxygenOS 16, with a focus on preserving search-entry ergonomics (auto keyboard focus, redirect behavior, and search launch flow) across launcher updates.
+SearchUp is an LSPosed module that turns the OnePlus OxygenOS 16 app drawer into a fast launcher search surface: swipe up, type immediately, and launch the intended app with minimal friction.
 
 ## Core Capabilities
 
 - Auto focus and keyboard display when entering app drawer via swipe up.
+- Korean-aware fuzzy search, including Hangul syllable and initial-consonant matching.
+- Launch the first visible search result on Enter.
+- One-tap System Launcher restart after settings changes.
 - Redirect global search entry points to app drawer search.
 - Redirect swipe-down search to app drawer with optional auto focus.
-- Launch first search result on Enter.
-- Optional fuzzy search for ranking app results.
+- Redirect left-swipe Discover entry to app drawer search when enabled.
 
 ## Invariants
 
@@ -30,4 +32,4 @@ This project maintains an LSPosed module for OnePlus System Launcher on OxygenOS
 
 - Full compatibility with non-OnePlus launchers.
 - Feature parity with unrelated launcher mods.
-- Rewriting the module UI during compatibility hotfix work.
+- A full settings-app redesign beyond making the core SearchUp flow obvious.

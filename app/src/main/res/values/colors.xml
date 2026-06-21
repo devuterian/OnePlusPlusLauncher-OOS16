@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimaryAccent">#FF656565</color>
-    <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="trans">#00000000</color>
+    <color name="m3_seed">#FFEB0028</color>
+    <color name="m3_status_active">#FF26A69A</color>
+    <color name="m3_status_inactive">#FF455A64</color>
+    <color name="m3_on_status">#FFFFFFFF</color>
+    <color name="m3_restart_button_surface">#FFFFFFFF</color>
+    <color name="m3_restart_button_label">#FF1B1B1F</color>
 </resources>

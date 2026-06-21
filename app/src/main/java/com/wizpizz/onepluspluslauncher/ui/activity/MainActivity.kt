@@ -1,10 +1,18 @@
 package com.wizpizz.onepluspluslauncher.ui.activity
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.highcapable.yukihookapi.YukiHookAPI
 import com.highcapable.yukihookapi.hook.factory.prefs
 import com.highcapable.yukihookapi.hook.xposed.prefs.YukiHookPrefsBridge
@@ -17,15 +25,12 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_S
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_SWIPE_DOWN_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_ENTER_KEY_LAUNCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_GLOBAL_SEARCH_REDIRECT
-import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_INCLUDE_APP_SHORTCUTS_SEARCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_LEFT_SWIPE_DISCOVER_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_SEARCH_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
-import com.wizpizz.onepluspluslauncher.ui.activity.base.BaseActivity
-import com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
 import com.wizpizz.onepluspluslauncher.utils.LocaleUtils
 
-class MainActivity : BaseActivity<ActivityMainBinding>() {
+class MainActivity : Activity() {
 
     private companion object {
         private const val TAG = "OPPLauncherUI"
@@ -36,8 +41,18 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     }
 
     private val prefs: YukiHookPrefsBridge by lazy { prefs() }
+    private lateinit var binding: ActivityMainBinding
 
-    override fun onCreate() {
+    override fun attachBaseContext(newBase: Context) {
+        val prefs = newBase.getSharedPreferences(LocaleUtils.PREFS_NAME, MODE_PRIVATE)
+        super.attachBaseContext(LocaleUtils.wrapContext(newBase, prefs.getString(LocaleUtils.PREF_UI_LANGUAGE, "")))
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setupSystemBars()
         setupToolbar()
         refreshModuleStatus()
         binding.mainTextVersion.text = getString(R.string.module_version, BuildConfig.VERSION_NAME)
@@ -54,7 +69,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         setupFeatureToggle(binding.leftSwipeDiscoverRedirectSwitch, PREF_LEFT_SWIPE_DISCOVER_REDIRECT)
         setupFeatureToggle(binding.autoFocusLeftSwipeRedirectSwitch, PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT)
         setupFeatureToggle(binding.fuzzySearchSwitchNew, PREF_USE_FUZZY_SEARCH)
-        setupFeatureToggle(binding.includeAppShortcutsSearchSwitch, PREF_INCLUDE_APP_SHORTCUTS_SEARCH, false)
         setupRestartLauncherButton()
         handleShortcutIntent(intent)
     }
@@ -63,6 +77,26 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShortcutIntent(intent)
+    }
+
+    private fun setupSystemBars() {
+        val isLightTheme = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
+            Configuration.UI_MODE_NIGHT_YES
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = isLightTheme
+            isAppearanceLightNavigationBars = isLightTheme
+        }
+        val surface = MaterialColors.getColor(
+            this,
+            com.google.android.material.R.attr.colorSurface,
+            android.graphics.Color.TRANSPARENT
+        )
+        window.statusBarColor = surface
+        window.navigationBarColor = surface
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = surface
+        }
     }
 
     private fun setupToolbar() {

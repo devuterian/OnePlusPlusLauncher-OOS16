@@ -17,7 +17,6 @@ object HookUtils {
 
     // Preference keys
     const val PREF_USE_FUZZY_SEARCH = "use_fuzzy_search"
-    const val PREF_INCLUDE_APP_SHORTCUTS_SEARCH = "include_app_shortcuts_search"
     const val PREF_AUTO_FOCUS_SEARCH_SWIPE = "auto_focus_search_swipe"
     const val PREF_AUTO_FOCUS_SEARCH_REDIRECT = "auto_focus_search_redirect"
     const val PREF_AUTO_FOCUS_SWIPE_DOWN_REDIRECT = "auto_focus_swipe_down_redirect"

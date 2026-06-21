@@ -110,7 +110,7 @@ jobs:
       run: |
         # Read versionCode and versionName from gradle.properties
         VERSION_CODE=$(grep "project.app.versionCode" gradle.properties | cut -d'=' -f2 | tr -d ' ')
-        VERSION_NAME=$(grep "project.app.versionName" gradle.properties | cut -d'=' -f2 | tr -d ' ')
+        VERSION_NAME=$(grep "project.app.versionName" gradle.properties | cut -d'=' -f2 | tr -d ' "')
         echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
         echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
         echo "xposed_tag=${VERSION_CODE}-${VERSION_NAME}" >> $GITHUB_OUTPUT
@@ -144,4 +144,4 @@ jobs:
         # Clean up
         rm -f release_body.md
         
-        echo "✅ Successfully created/updated release on Xposed repo: ${{ steps.version_info.outputs.xposed_tag }}" 
+        echo "✅ Successfully created/updated release on Xposed repo: ${{ steps.version_info.outputs.xposed_tag }}"

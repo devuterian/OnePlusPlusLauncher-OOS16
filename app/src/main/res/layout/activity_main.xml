@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?attr/colorSurface"
     android:fitsSystemWindows="true"
+    android:orientation="vertical"
     tools:context=".ui.activity.MainActivity">
 
     <com.google.android.material.appbar.AppBarLayout
@@ -28,12 +29,12 @@
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:clipToPadding="false"
         android:fadingEdgeLength="12dp"
         android:paddingBottom="24dp"
-        android:requiresFadingEdge="vertical"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:requiresFadingEdge="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -118,6 +119,14 @@
                         app:icon="@android:drawable/ic_menu_rotate"
                         app:iconGravity="textStart"
                         app:iconPadding="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/restart_launcher_hint"
+                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                        android:textColor="@color/m3_on_status" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -179,7 +188,26 @@
                         android:text="@string/category_search_enhancement"
                         android:textAppearance="@style/TextAppearance.App.LabelSmall" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/recommended_flow_hint"
+                        android:textAppearance="@style/TextAppearance.App.BodyMedium" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/auto_focus_search_swipe_switch"
+                        style="@style/Widget.App.Switch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pref_auto_focus_search_swipe_title" />
+
+                    <com.google.android.material.divider.MaterialDivider
+                        style="@style/Widget.App.Divider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/fuzzy_search_switch_new"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -191,19 +219,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
-                        android:id="@+id/include_app_shortcuts_search_switch"
-                        style="@style/Widget.App.Switch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/pref_include_app_shortcuts_search_title" />
-
-                    <com.google.android.material.divider.MaterialDivider
-                        style="@style/Widget.App.Divider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/enter_key_launch_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -234,19 +250,7 @@
                         android:text="@string/category_auto_focus"
                         android:textAppearance="@style/TextAppearance.App.LabelSmall" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
-                        android:id="@+id/auto_focus_search_swipe_switch"
-                        style="@style/Widget.App.Switch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/pref_auto_focus_search_swipe_title" />
-
-                    <com.google.android.material.divider.MaterialDivider
-                        style="@style/Widget.App.Divider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/auto_focus_search_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -258,7 +262,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/auto_focus_swipe_down_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -270,7 +274,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/auto_focus_left_swipe_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -301,7 +305,7 @@
                         android:text="@string/category_search_redirect"
                         android:textAppearance="@style/TextAppearance.App.LabelSmall" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/global_search_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -313,7 +317,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/swipe_down_search_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -325,7 +329,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
-                    <com.wizpizz.onepluspluslauncher.ui.view.MaterialSwitch
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/left_swipe_discover_redirect_switch"
                         style="@style/Widget.App.Switch"
                         android:layout_width="match_parent"
@@ -365,4 +369,4 @@
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

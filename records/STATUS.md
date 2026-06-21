@@ -1,38 +1,38 @@
-# OnePlusPlusLauncher OOS16 Status
+# SearchUp OOS16 Status
 
 ## Snapshot
 
-- Last updated: 2026-05-28
+- Last updated: 2026-06-21
 - Overall posture: `active`
-- Current focus: System Launcher 16.6.5 compatibility fix for keyboard and auto focus paths.
-- Highest-priority blocker: Launcher 16.6.5 internal API drift versus 16.4.15 assumptions.
-- Next operator decision needed: release tag naming and whether to publish test builds before full release.
+- Current focus: Keep the SearchUp default flow simple and verify it against target launcher updates.
+- Highest-priority blocker: none known in this checkout.
+- Next operator decision needed: whether to ship the settings-copy cleanup as the next release.
 - Related decisions: none
 
 ## Current State Summary
 
-The fork has been initialized from upstream and adopted into a repo-template structure. The immediate execution track is to repair auto focus and keyboard behavior on OnePlus 13 OxygenOS 16 with System Launcher 16.6.5, then validate build automation through GitHub Actions artifact output.
+SearchUp has been rebranded and released for the OOS16 launcher track. The core value is swipe-up search focus, Korean-aware fuzzy search, Enter-to-launch, redirect handling, gesture-back cleanup, and an in-app launcher restart action.
 
 ## Active Phases Or Tracks
 
-### 16.6.5 Compatibility Hotfix
+### SearchUp Flow Polish
 
-- Goal: Restore keyboard and auto focus behavior for swipe-up and swipe-down redirect paths.
+- Goal: Make the settings screen explain the recommended SearchUp flow first, with redirect/focus edge toggles treated as advanced controls.
 - Status: `in progress`
-- Why this matters now: The current release is functionally broken on target launcher version.
-- Current work: Hook signature verification, focus logic unification, and swipe-down preference wiring.
-- Exit criteria: All three affected toggles work on-device and debug APK builds in Actions.
-- Dependencies: adb access, LSPosed test loop, decompiled launcher references.
-- Risks: OEM launcher updates may invalidate new signatures quickly.
-- Related ids: pending `RSH-*`
+- Why this matters now: the feature set works best when users can tell which toggles are the main experience.
+- Current work: UI wording and grouping cleanup.
+- Exit criteria: app settings surface separates the recommended flow from advanced redirects.
+- Dependencies: local build and device sanity check before release.
+- Risks: copy-only changes can still leave users confused if LSPosed scope is wrong.
+- Related ids: none
 
-### CI and Fork Hardening
+### Launcher Compatibility Watch
 
-- Goal: Ensure devuterian fork is pushable and consistently builds APK artifacts.
-- Status: `in progress`
-- Why this matters now: Fixes must be distributable and reproducible.
-- Current work: remote setup, push flow, workflow trigger validation.
-- Exit criteria: successful Actions run with downloadable APK artifact.
-- Dependencies: GitHub auth, origin remote permissions.
-- Risks: unauthenticated CLI session and release secret setup delays.
+- Goal: Keep verified compatibility claims tied to real System Launcher versions.
+- Status: `active`
+- Why this matters now: OEM launcher updates can break hook signatures.
+- Current work: preserve safe fallback behavior and update release notes when launcher support changes.
+- Exit criteria: each public compatibility claim names the tested launcher/device base.
+- Dependencies: adb/LSPosed validation loop on target hardware.
+- Risks: launcher internals can drift without warning.
 - Related ids: none
