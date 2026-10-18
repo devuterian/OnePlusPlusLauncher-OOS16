@@ -214,6 +214,27 @@
                         android:layout_height="wrap_content"
                         android:text="@string/pref_fuzzy_search_title" />
 
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/search_aliases_layout"
+                        style="@style/Widget.App.TextField"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="12dp"
+                        android:hint="@string/pref_search_aliases_title"
+                        app:helperText="@string/pref_search_aliases_helper"
+                        app:helperTextEnabled="true">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/search_aliases_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="top|start"
+                            android:inputType="textMultiLine|textNoSuggestions"
+                            android:minLines="2"
+                            android:textAppearance="@style/TextAppearance.App.BodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <com.google.android.material.divider.MaterialDivider
                         style="@style/Widget.App.Divider"
                         android:layout_width="match_parent"

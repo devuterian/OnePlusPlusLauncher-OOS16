@@ -7,6 +7,8 @@
     <string name="module_is_activated">已激活</string>
 
     <string name="pref_fuzzy_search_title">更好地搜索中英应用名</string>
+    <string name="pref_search_aliases_title">搜索别名</string>
+    <string name="pref_search_aliases_helper">每行一个，格式为 别名 = 应用名。例如：地图 = Maps</string>
     <string name="pref_language_title">语言</string>
     <string name="pref_auto_focus_search_swipe_title">上滑后立即显示键盘</string>
     <string name="pref_auto_focus_search_redirect_title">搜索按钮跳转后显示键盘</string>

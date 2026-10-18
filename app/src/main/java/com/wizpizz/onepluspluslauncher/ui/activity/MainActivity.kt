@@ -26,6 +26,7 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_AUTO_FOCUS_S
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_ENTER_KEY_LAUNCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_GLOBAL_SEARCH_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_LEFT_SWIPE_DISCOVER_REDIRECT
+import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SEARCH_ALIASES
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_SEARCH_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
 import com.wizpizz.onepluspluslauncher.utils.LocaleUtils
@@ -69,6 +70,7 @@ class MainActivity : Activity() {
         setupFeatureToggle(binding.leftSwipeDiscoverRedirectSwitch, PREF_LEFT_SWIPE_DISCOVER_REDIRECT)
         setupFeatureToggle(binding.autoFocusLeftSwipeRedirectSwitch, PREF_AUTO_FOCUS_LEFT_SWIPE_REDIRECT)
         setupFeatureToggle(binding.fuzzySearchSwitchNew, PREF_USE_FUZZY_SEARCH)
+        setupSearchAliases()
         setupRestartLauncherButton()
         handleShortcutIntent(intent)
     }
@@ -117,6 +119,25 @@ class MainActivity : Activity() {
             if (button.isPressed) {
                 prefs.native().edit { putBoolean(prefKey, isChecked) }
             }
+        }
+    }
+
+    override fun onPause() {
+        saveSearchAliases()
+        super.onPause()
+    }
+
+    private fun setupSearchAliases() {
+        binding.searchAliasesInput.setText(prefs.getString(PREF_SEARCH_ALIASES, ""))
+        binding.searchAliasesInput.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveSearchAliases()
+        }
+    }
+
+    private fun saveSearchAliases() {
+        val text = binding.searchAliasesInput.text?.toString()?.trim().orEmpty()
+        if (text != prefs.getString(PREF_SEARCH_ALIASES, "")) {
+            prefs.native().edit { putString(PREF_SEARCH_ALIASES, text) }
         }
     }
 

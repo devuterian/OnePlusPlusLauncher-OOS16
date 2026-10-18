@@ -26,6 +26,9 @@ object SwipeUpAutoFocusHook {
 
     @Volatile
     private var searchImeWasVisible = false
+
+    @Volatile
+    private var lastImeVisible: Boolean? = null
     
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
@@ -56,13 +59,12 @@ object SwipeUpAutoFocusHook {
                 lastSwipeFocusAt = now
                 HookUtils.drawerOpenTime = now
 
-                val hostView = (launcher as? android.app.Activity)?.window?.decorView
-                hostView?.postDelayed({
-                    if (!HookUtils.isRedirectInProgress()) {
-                        Log.d(TAG, "[AutoFocus] Entering search mode via onStateSetStart")
-                        HookUtils.focusSearchInputOnce(launcher, classLoader)
-                    }
-                }, 120L)
+                // Enter search mode on the same frame the drawer starts opening, so the full app
+                // grid never flashes before switching to the search layout.
+                if (!HookUtils.isRedirectInProgress()) {
+                    Log.d(TAG, "[AutoFocus] Entering search mode via onStateSetStart")
+                    HookUtils.focusSearchInputOnce(launcher, classLoader)
+                }
             }
         } ?: Log.d(TAG, "[AutoFocus] onStateSetStart with two params not found")
     }
@@ -125,24 +127,32 @@ object SwipeUpAutoFocusHook {
         }?.hook {
             after {
                 val insets = args.getOrNull(0) as? WindowInsets ?: return@after
+                // Insets are dispatched every frame while the keyboard animates; only act on changes.
+                val imeVisible = insets.isVisible(WindowInsets.Type.ime())
+                if (imeVisible == lastImeVisible) return@after
+
                 val classLoader = appClassLoader ?: return@after
                 val view = instance as? android.view.View ?: return@after
                 val launcher = HookUtils.getLauncherFromContext(view.context, classLoader) ?: return@after
                 val searchModeActive = HookUtils.isSearchModeActive(launcher, classLoader)
-                val imeVisible = insets.isVisible(WindowInsets.Type.ime())
 
                 if (!searchModeActive) {
+                    lastImeVisible = imeVisible
                     searchImeWasVisible = false
                     return@after
                 }
 
                 if (imeVisible) {
+                    lastImeVisible = true
                     searchImeWasVisible = true
                     return@after
                 }
 
+                // Leave lastImeVisible untouched here so the next insets pass re-checks.
                 val justEnteredSearch = System.currentTimeMillis() - lastSwipeFocusAt < 700L
-                if (searchImeWasVisible && !justEnteredSearch) {
+                if (justEnteredSearch) return@after
+                lastImeVisible = false
+                if (searchImeWasVisible) {
                     searchImeWasVisible = false
                     if (HookUtils.resetSearchModeIfActive(launcher, classLoader)) {
                         Log.d(TAG, "[AutoFocus] Reset search mode after IME hidden")

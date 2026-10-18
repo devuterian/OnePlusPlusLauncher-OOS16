@@ -10,8 +10,9 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.LAUNCHER_CLASS
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SEARCH_HISTORY_RECENCY
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.TAG
-import me.xdrop.fuzzywuzzy.FuzzySearch
-import kotlin.math.roundToInt
+import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SEARCH_ALIASES
+import java.lang.reflect.Field
+import java.lang.reflect.Method
 
 
 object FuzzySearchHook {
@@ -23,9 +24,11 @@ object FuzzySearchHook {
     private const val APP_INFO_CLASS = "com.android.launcher3.model.data.AppInfo"
     private const val ARRAY_LIST_CLASS = "java.util.ArrayList"
 
-    private const val PREFIX_MATCH_MULTIPLIER = 1.5
-    private const val SUBSTRING_MATCH_MULTIPLIER = 1.3
-    private const val SUBSEQUENCE_MATCH_MULTIPLIER = 1.1
+    private const val SEARCH_ALGORITHM_CLASS =
+        "com.android.launcher3.allapps.search.OplusDefaultAppSearchAlgorithm"
+    private const val DEEP_PROTECTED_APPS_CLASS = "com.android.launcher.filter.DeepProtectedAppsManager"
+    private const val ITEM_INFO_CLASS = "com.android.launcher3.model.data.ItemInfo"
+    private const val ALIAS_REFRESH_MS = 5000L
 
     // Shared state for SwipeDownSearchRedirectHook coordination
     @Volatile
@@ -38,41 +41,31 @@ object FuzzySearchHook {
     private var historyInjectedTime = 0L
     private const val HISTORY_LOCK_WINDOW_MS = 2000L
 
-    data class FuzzyMatchResult(
-        val itemInfo: Any,
-        val score: Int,
-        val koreanMatchPriority: Int,
-        val directMatchPriority: Int,
-        val appName: String
-    )
+    // Reflection handles, resolved once per process.
+    private var titleField: Field? = null
+    private var componentField: Field? = null
+    private var userField: Field? = null
+    private var asAppMethod: Method? = null
+    private var algorithmContextField: Field? = null
+    private var hiddenAppsGetInstance: Method? = null
+    private var hiddenAppsCheck: Method? = null
+    private var hiddenAppsLookupFailed = false
+
+    @Volatile private var aliases: List<AppSearchEngine.Alias> = AppSearchEngine.buildAliases(null)
+    @Volatile private var aliasText: String? = null
+    @Volatile private var aliasCheckedAt = 0L
 
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
-            // Hook onSearchResult for fuzzy search
+            hookTitleMatchResult()
+            hookLaunchTracking()
+
+            // Cache the container for SwipeDownSearchRedirectHook and keep result icons from fading in
             SEARCH_CONTAINER_CLASS.toClassOrNull(appClassLoader)?.method {
                 name = "onSearchResult"
                 param(String::class.java.name, ARRAY_LIST_CLASS)
             }?.hook {
-                before {
-                    // Cache the container instance for SwipeDownSearchRedirectHook
-                    searchContainerInstance = instance
-
-                    val rawQuery = args[0] as? String ?: return@before
-                    val sanitizedQuery = sanitizeSearchQuery(rawQuery)
-                    if (sanitizedQuery.isBlank()) return@before
-
-                    val useFuzzySearch = try { prefs.getBoolean(PREF_USE_FUZZY_SEARCH, true) } catch (_: Throwable) { true }
-                    if (!useFuzzySearch) return@before
-
-                    try {
-                        val sortedResults = performFuzzySearch(instance, sanitizedQuery)
-                        if (sortedResults.isNotEmpty()) {
-                            args[1] = sortedResults
-                        }
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "[FuzzySearch] Error during fuzzy search: ${e.message}")
-                    }
-                }
+                before { searchContainerInstance = instance }
                 after {
                     val rawQuery = args[0] as? String ?: return@after
                     if (rawQuery.isNotBlank()) disableSearchResultFade(instance)
@@ -131,30 +124,7 @@ object FuzzySearchHook {
                     }
                 }
             }
-
-            // Anti-flash: block Workspace.requestFocus for 5s after redirect
-            // Prevents gray focus box appearing on desktop icons
-            "com.android.launcher3.Workspace".toClassOrNull(appClassLoader)?.method {
-                name = "requestFocus"
-                paramCount(0..2)
-            }?.hook {
-                before {
-                    if (System.currentTimeMillis() - lastRedirectTime < 5000) {
-                        result = false
-                        Log.d(TAG, "[AntiFlash] Blocked Workspace.requestFocus after redirect")
-                    }
-                }
-            }
         }
-    }
-
-    private fun sanitizeSearchQuery(input: String): String {
-        if (input.isEmpty()) return input
-        val builder = StringBuilder(input.length)
-        input.forEach { ch ->
-            if (ch != ' ' && ch != '\'') builder.append(ch)
-        }
-        return builder.toString()
     }
 
     private fun disableSearchResultFade(containerInstance: Any) {
@@ -175,182 +145,168 @@ object FuzzySearchHook {
         }
     }
 
-    private fun PackageParam.performFuzzySearch(
-        containerInstance: Any,
-        query: String
-    ): ArrayList<Any> {
-        val appsList = getAppsListFromContainer(containerInstance) ?: return ArrayList()
-        val allAppInfos = getAllAppInfos(appsList) ?: return ArrayList()
-        return convertToAdapterItems(scoreSearchResults(allAppInfos, query))
+    /**
+     * Replaces the launcher's title matcher. It already runs on the launcher's model thread,
+     * so ranking never blocks the UI thread.
+     */
+    private fun PackageParam.hookTitleMatchResult() {
+        val algorithmClass = SEARCH_ALGORITHM_CLASS.toClassOrNull(appClassLoader) ?: run {
+            Log.e(TAG, "[FuzzySearch] $SEARCH_ALGORITHM_CLASS not found")
+            return
+        }
+        algorithmClass.method {
+            name = "getTitleMatchResult"
+            param(List::class.java, String::class.java)
+        }.hook {
+            before {
+                val query = args[1] as? String ?: return@before
+                if (AppSearchEngine.normalize(query).isEmpty()) return@before
+                val useFuzzySearch = try { prefs.getBoolean(PREF_USE_FUZZY_SEARCH, true) } catch (_: Throwable) { true }
+                if (!useFuzzySearch) return@before
+                val apps = args[0] as? List<*> ?: return@before
+                try {
+                    val started = System.nanoTime()
+                    val results = searchApps(instance, apps, query)
+                    // No match: let the launcher's own search try (pinyin, system aliases).
+                    if (!results.isNullOrEmpty()) {
+                        result = results
+                        Log.d(TAG, "[FuzzySearch] query(len=${query.length}) -> ${results.size} results in ${(System.nanoTime() - started) / 1000}us")
+                    }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "[FuzzySearch] search failed, using launcher search: ${e.message}")
+                }
+            }
+        }
     }
 
-    private fun getAppsListFromContainer(containerInstance: Any): Any? {
-        return try {
-            val appsViewField =
-                containerInstance.javaClass.field { name = "mAppsView"; superClass(true) }
-            val appsViewInstance = appsViewField.get(containerInstance).any() ?: return null
+    private fun PackageParam.searchApps(algorithm: Any, apps: List<*>, query: String): ArrayList<Any>? {
+        val classLoader = appClassLoader ?: return null
+        val context = algorithmContext(algorithm) ?: return null
+        LauncherSearchIndex.ensureInitialized(context)
+        refreshAliases()
+        if (!resolveAppInfoHandles(classLoader)) return null
 
-            appsViewInstance.current().method { name = "getAlphabeticalAppsList"; superClass() }
-                .call()
-                ?: appsViewInstance.current().method { name = "getAppsList"; superClass() }.call()
-                ?: appsViewInstance.current().method { name = "getApps"; superClass() }.call()
+        val candidates = ArrayList<Pair<Any, AppSearchEngine.Entry>>(apps.size)
+        val needEnglish = ArrayList<android.content.ComponentName>()
+        for (app in apps) {
+            if (app == null) continue
+            val component = componentField?.get(app) as? android.content.ComponentName ?: continue
+            // If the privacy-lock check is unavailable, fall back to stock search so hidden apps stay hidden.
+            val hidden = isHiddenApp(context, app, classLoader) ?: return null
+            if (hidden) continue
+            val label = (titleField?.get(app) as? CharSequence)?.toString() ?: continue
+            val user = userField?.get(app) as? android.os.UserHandle
+            val entry = LauncherSearchIndex.entryFor(LauncherSearchIndex.appId(component, user), component, label)
+            if (entry.labelIsHangul || label.none(KeyboardLayoutUtils::isLatinLetter)) needEnglish.add(component)
+            candidates.add(app to entry)
+        }
+        LauncherSearchIndex.requestEnglishLabels(needEnglish)
+        LauncherSearchIndex.retainOnly(candidates)
+
+        val now = System.currentTimeMillis()
+        val ranked = AppSearchEngine.rank(candidates, query, aliases) { id -> LauncherSearchIndex.usage.valueOf(id, now) }
+        val asApp = asAppMethod ?: return null
+        val output = ArrayList<Any>(ranked.size)
+        ranked.forEachIndexed { index, item ->
+            asApp.invoke(null, index, "", item.item)?.let(output::add)
+        }
+        return output
+    }
+
+    private fun PackageParam.refreshAliases() {
+        val now = System.currentTimeMillis()
+        if (now - aliasCheckedAt < ALIAS_REFRESH_MS) return
+        aliasCheckedAt = now
+        val text = try { prefs.getString(PREF_SEARCH_ALIASES, "") } catch (_: Throwable) { "" }
+        if (text != aliasText) {
+            aliasText = text
+            aliases = AppSearchEngine.buildAliases(text)
+        }
+    }
+
+    private fun algorithmContext(algorithm: Any): android.content.Context? {
+        val field = algorithmContextField ?: findField(algorithm.javaClass, "mContext")?.also { algorithmContextField = it }
+        return field?.get(algorithm) as? android.content.Context
+    }
+
+    private fun resolveAppInfoHandles(classLoader: ClassLoader): Boolean {
+        if (asAppMethod != null) return true
+        return try {
+            val appInfoClass = APP_INFO_CLASS.toClassOrNull(classLoader) ?: return false
+            titleField = appInfoClass.getField("title")
+            componentField = appInfoClass.getField("componentName")
+            userField = appInfoClass.getField("user")
+            asAppMethod = BASE_ADAPTER_ITEM_CLASS.toClassOrNull(classLoader)
+                ?.getMethod("asApp", Int::class.javaPrimitiveType, String::class.java, appInfoClass)
+            asAppMethod != null
         } catch (e: Throwable) {
-            Log.e(TAG, "[FuzzySearch] Failed to get apps list: ${e.message}")
+            Log.e(TAG, "[FuzzySearch] AppInfo fields not found: ${e.message}")
+            false
+        }
+    }
+
+    /** Apps hidden with the system privacy lock must stay out of search, like stock search. */
+    /** Returns null when the check is unavailable. */
+    private fun isHiddenApp(context: android.content.Context, appInfo: Any, classLoader: ClassLoader): Boolean? {
+        if (hiddenAppsLookupFailed) return null
+        return try {
+            if (hiddenAppsCheck == null) {
+                val managerClass = DEEP_PROTECTED_APPS_CLASS.toClassOrNull(classLoader)
+                    ?: throw ClassNotFoundException(DEEP_PROTECTED_APPS_CLASS)
+                hiddenAppsGetInstance = managerClass.getMethod("getInstance", android.content.Context::class.java)
+                hiddenAppsCheck = managerClass.methods.first {
+                    it.name == "isAppHiddenEntryAndSupportPrivacyLock" && it.parameterTypes.size == 1
+                }
+            }
+            val manager = hiddenAppsGetInstance?.invoke(null, context)
+            hiddenAppsCheck?.invoke(manager, appInfo) as? Boolean
+        } catch (e: NoSuchMethodException) {
+            hiddenAppsLookupFailed = true
+            Log.e(TAG, "[FuzzySearch] hidden-app check unavailable, using launcher search: ${e.message}")
+            null
+        } catch (e: NoSuchElementException) {
+            hiddenAppsLookupFailed = true
+            Log.e(TAG, "[FuzzySearch] hidden-app check unavailable, using launcher search: ${e.message}")
+            null
+        } catch (e: Throwable) {
+            Log.e(TAG, "[FuzzySearch] hidden-app check failed: ${e.message}")
             null
         }
     }
 
-    private fun getAllAppInfos(appsList: Any): List<*>? {
-        return try {
-            appsList.current().method {
-                name = "getApps"
-                superClass(true)
-            }.call() as? List<*>
-        } catch (e: Throwable) {
-            try {
-                val allAppsStore =
-                    appsList.current().method { name = "getAllAppsStore"; superClass(true) }.call()
-                allAppsStore?.current()?.method { name = "getApps"; superClass(true) }
-                    ?.call() as? List<*>
-            } catch (e2: Throwable) {
-                Log.e(TAG, "[FuzzySearch] Failed to get app infos: ${e2.message}")
-                null
-            }
-        }
-    }
-
-    private fun PackageParam.scoreSearchResults(
-        appInfos: List<*>,
-        query: String
-    ): List<FuzzyMatchResult> {
-        val scoredResults = ArrayList<FuzzyMatchResult>()
-        val appInfoClass = APP_INFO_CLASS.toClass(appClassLoader)
-        val queryLower = query.lowercase()
-
-        appInfos.filterNotNull().forEach { appInfoObj ->
-            try {
-                if (!appInfoClass.isInstance(appInfoObj)) return@forEach
-
-                val appInfo = appInfoClass.cast(appInfoObj)
-                val titleField = appInfo?.javaClass?.field { name = "title"; superClass(true) }
-                val appName = titleField?.get(appInfo)?.any()?.toString() ?: ""
-                val appNameLower = appName.lowercase()
-                val matchScore = scoreLabel(appNameLower, queryLower, appName, query)
-
-                appInfo?.let {
-                    FuzzyMatchResult(
-                        itemInfo = it,
-                        score = matchScore.score,
-                        koreanMatchPriority = matchScore.koreanPriority,
-                        directMatchPriority = matchScore.directPriority,
-                        appName = appName
-                    )
+    /** Counts launches (home, drawer, search) for frequency ranking. */
+    private fun PackageParam.hookLaunchTracking() {
+        val itemInfoClass = ITEM_INFO_CLASS.toClassOrNull(appClassLoader) ?: return
+        LAUNCHER_CLASS.toClassOrNull(appClassLoader)?.method {
+            name = "startActivitySafely"
+            param(android.view.View::class.java, android.content.Intent::class.java, itemInfoClass)
+        }?.hook {
+            before {
+                try {
+                    val intent = args[1] as? android.content.Intent
+                    val itemInfo = args[2]
+                    val component = (itemInfo?.let {
+                        it.javaClass.getMethod("getTargetComponent").invoke(it) as? android.content.ComponentName
+                    }) ?: intent?.component ?: return@before
+                    val user = itemInfo?.let { findField(it.javaClass, "user")?.get(it) as? android.os.UserHandle }
+                    (instance as? android.content.Context)?.let(LauncherSearchIndex::ensureInitialized)
+                    LauncherSearchIndex.recordLaunch(LauncherSearchIndex.appId(component, user))
+                } catch (e: Throwable) {
+                    Log.d(TAG, "[FuzzySearch] launch tracking skipped: ${e.message}")
                 }
-                    ?.let { scoredResults.add(it) }
-            } catch (e: Throwable) {
-                Log.e(TAG, "[FuzzySearch] Error processing app: ${e.message}")
             }
-        }
-
-        return scoredResults
+        } ?: Log.e(TAG, "[FuzzySearch] startActivitySafely not found")
     }
 
-    private data class MatchScore(
-        val score: Int,
-        val koreanPriority: Int,
-        val directPriority: Int
-    )
-
-    private fun scoreLabel(
-        labelLower: String,
-        queryLower: String,
-        rawLabel: String,
-        rawQuery: String
-    ): MatchScore {
-        val koreanMatch = KoreanSearchUtils.score(rawLabel, rawQuery)
-        val directPriority = when {
-            queryLower.isEmpty() -> 0
-            labelLower == queryLower -> 3
-            labelLower.startsWith(queryLower) -> 2
-            labelLower.contains(queryLower) -> 1
-            else -> 0
-        }
-
-        return MatchScore(
-            score = calculateMatchScore(labelLower, queryLower, koreanMatch.score),
-            koreanPriority = koreanMatch.priority,
-            directPriority = directPriority
-        )
-    }
-
-    private fun calculateMatchScore(labelLower: String, queryLower: String, koreanScore: Int): Int {
-        val baseScore = try {
-            FuzzySearch.weightedRatio(labelLower, queryLower)
-        } catch (t: Throwable) {
-            0
-        }
-
-        val multiplier = when {
-            queryLower.isEmpty() -> 1.0
-            labelLower.startsWith(queryLower) -> PREFIX_MATCH_MULTIPLIER
-            labelLower.contains(queryLower) -> SUBSTRING_MATCH_MULTIPLIER
-            isSubsequence(labelLower, queryLower) -> SUBSEQUENCE_MATCH_MULTIPLIER
-            else -> 1.0
-        }
-
-        return maxOf((baseScore * multiplier).roundToInt(), koreanScore)
-    }
-
-    private fun isSubsequence(text: String, pattern: String): Boolean {
-        if (pattern.isEmpty()) return true
-        var textIndex = 0
-        var patternIndex = 0
-        while (textIndex < text.length && patternIndex < pattern.length) {
-            if (text[textIndex] == pattern[patternIndex]) {
-                patternIndex++
-            }
-            textIndex++
-        }
-        return patternIndex == pattern.length
-    }
-
-    private fun PackageParam.convertToAdapterItems(scoredResults: List<FuzzyMatchResult>): ArrayList<Any> {
-        val sortedResults = scoredResults.sortedWith(
-            compareByDescending<FuzzyMatchResult> {
-                it.koreanMatchPriority
-            }.thenByDescending {
-                it.directMatchPriority
-            }.thenByDescending { it.score }
-        )
-
-        val finalAdapterItems = ArrayList<Any>()
-        val adapterItemClass = BASE_ADAPTER_ITEM_CLASS.toClass(appClassLoader)
-        val appInfoClass = APP_INFO_CLASS.toClass(appClassLoader)
-
-        sortedResults.forEach { result ->
+    private fun findField(start: Class<*>, fieldName: String): Field? {
+        var current: Class<*>? = start
+        while (current != null) {
             try {
-                val adapterItem = createAppAdapterItem(adapterItemClass, appInfoClass, result.itemInfo)
-
-                if (adapterItem != null) {
-                    finalAdapterItems.add(adapterItem)
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "[FuzzySearch] Error converting ${result.appName}: ${e.message}")
+                return current.getDeclaredField(fieldName).apply { isAccessible = true }
+            } catch (_: NoSuchFieldException) {
+                current = current.superclass
             }
         }
-
-        return finalAdapterItems
-    }
-
-    private fun createAppAdapterItem(
-        adapterItemClass: Class<*>,
-        appInfoClass: Class<*>,
-        appInfo: Any
-    ): Any? {
-        return adapterItemClass.method {
-            name = "asApp"
-            param(appInfoClass)
-            modifiers { isStatic }
-        }.get().call(appInfo)
+        return null
     }
 }

@@ -7,6 +7,8 @@
     <string name="module_is_activated">모듈이 활성화되어 있습니다</string>
 
     <string name="pref_fuzzy_search_title">한글/영문 검색 더 잘 찾기</string>
+    <string name="pref_search_aliases_title">검색 별명</string>
+    <string name="pref_search_aliases_helper">한 줄에 하나씩 \"별명 = 앱 이름\" 형식으로 입력합니다. 예: 맵 = 지도, 네이버지도</string>
     <string name="pref_language_title">언어</string>
     <string name="pref_auto_focus_search_swipe_title">위로 올리면 바로 키보드 표시</string>
     <string name="pref_auto_focus_search_redirect_title">검색 버튼 이동 후 키보드 표시</string>
