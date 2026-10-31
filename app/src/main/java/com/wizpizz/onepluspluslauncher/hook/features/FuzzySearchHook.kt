@@ -245,8 +245,10 @@ object FuzzySearchHook {
         }
     }
 
-    /** Apps hidden with the system privacy lock must stay out of search, like stock search. */
-    /** Returns null when the check is unavailable. */
+    /**
+     * Apps hidden with the system privacy lock must stay out of search, like stock search.
+     * Returns null when the check is unavailable.
+     */
     private fun isHiddenApp(context: android.content.Context, appInfo: Any, classLoader: ClassLoader): Boolean? {
         if (hiddenAppsLookupFailed) return null
         return try {

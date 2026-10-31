@@ -30,6 +30,7 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SEARCH_ALIAS
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_SWIPE_DOWN_SEARCH_REDIRECT
 import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.PREF_USE_FUZZY_SEARCH
 import com.wizpizz.onepluspluslauncher.utils.LocaleUtils
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
 
@@ -38,6 +39,7 @@ class MainActivity : Activity() {
         private const val LAUNCHER_PACKAGE = "com.android.launcher"
         private const val ACTION_RESTART_LAUNCHER =
             "com.wizpizz.onepluspluslauncher.action.RESTART_LAUNCHER"
+        private const val SU_TIMEOUT_SECONDS = 10L
         private const val GITHUB_URL = "https://github.com/devuterian/OnePlusPlusLauncher-OOS16"
     }
 
@@ -175,12 +177,20 @@ class MainActivity : Activity() {
     }
 
     private fun restartLauncherWithToast() {
-        val success = restartLauncherProcess()
-        Toast.makeText(
-            this,
-            getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
-            Toast.LENGTH_SHORT
-        ).show()
+        // su can block on a root prompt; keep it off the UI thread so the app never freezes.
+        binding.restartLauncherButton.isEnabled = false
+        Thread({
+            val success = restartLauncherProcess()
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                binding.restartLauncherButton.isEnabled = true
+                Toast.makeText(
+                    this,
+                    getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }, "SearchUp-restart").start()
     }
 
     private fun restartLauncherProcess(): Boolean {
@@ -199,9 +209,14 @@ class MainActivity : Activity() {
         )
 
         for (attempt in attempts) {
+            var process: Process? = null
             try {
-                val process = Runtime.getRuntime().exec(attempt)
-                val exitCode = process.waitFor()
+                process = Runtime.getRuntime().exec(attempt)
+                if (!process.waitFor(SU_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    Log.d(TAG, "runSuCommand timed out via ${attempt.joinToString(" ")}")
+                    continue
+                }
+                val exitCode = process.exitValue()
                 if (exitCode == 0) {
                     Log.d(TAG, "runSuCommand success via ${attempt.joinToString(" ")}")
                     return true
@@ -209,6 +224,8 @@ class MainActivity : Activity() {
                 Log.d(TAG, "runSuCommand exit=$exitCode via ${attempt.joinToString(" ")}")
             } catch (e: Throwable) {
                 Log.d(TAG, "runSuCommand failed via ${attempt.joinToString(" ")}: ${e.message}")
+            } finally {
+                process?.destroy()
             }
         }
         return false
