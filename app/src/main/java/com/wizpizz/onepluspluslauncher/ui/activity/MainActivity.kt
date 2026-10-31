@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.google.android.material.color.MaterialColors
@@ -39,7 +40,8 @@ class MainActivity : Activity() {
         private const val LAUNCHER_PACKAGE = "com.android.launcher"
         private const val ACTION_RESTART_LAUNCHER =
             "com.wizpizz.onepluspluslauncher.action.RESTART_LAUNCHER"
-        private const val SU_TIMEOUT_SECONDS = 10L
+        private const val SU_TIMEOUT_SECONDS = 20L  // Magisk prompt auto-answers after 10s
+        private val restartInFlight = AtomicBoolean(false)
         private const val GITHUB_URL = "https://github.com/devuterian/OnePlusPlusLauncher-OOS16"
     }
 
@@ -178,16 +180,22 @@ class MainActivity : Activity() {
 
     private fun restartLauncherWithToast() {
         // su can block on a root prompt; keep it off the UI thread so the app never freezes.
+        // The shortcut and a recreated activity bypass the button, so guard across instances too.
+        if (!restartInFlight.compareAndSet(false, true)) return
         binding.restartLauncherButton.isEnabled = false
         Thread({
-            val success = restartLauncherProcess()
+            val success = try {
+                restartLauncherProcess()
+            } finally {
+                restartInFlight.set(false)
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 binding.restartLauncherButton.isEnabled = true
                 Toast.makeText(
                     this,
                     getString(if (success) R.string.restart_launcher_success else R.string.restart_launcher_failed),
-                    Toast.LENGTH_SHORT
+                    if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
                 ).show()
             }
         }, "SearchUp-restart").start()
@@ -213,8 +221,9 @@ class MainActivity : Activity() {
             try {
                 process = Runtime.getRuntime().exec(attempt)
                 if (!process.waitFor(SU_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    // su exists but isn't answering; another su path won't help and the command may still run later.
                     Log.d(TAG, "runSuCommand timed out via ${attempt.joinToString(" ")}")
-                    continue
+                    return false
                 }
                 val exitCode = process.exitValue()
                 if (exitCode == 0) {
