@@ -29,7 +29,7 @@ The original project is [OnePlusPlusLauncher](https://github.com/wizpizz/OnePlus
 ## Compatibility
 
 - Verified device base: OnePlus 13 / OxygenOS 16
-- Verified launcher base: System Launcher `16.6.5`
+- Verified launcher base: System Launcher `16.6.17`
 - LSPosed scope: `com.android.launcher`
 - App package: `com.wizpizz.onepluspluslauncher`
 - Module version: `1.0.0-oos16.0.7.201`

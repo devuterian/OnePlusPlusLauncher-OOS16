@@ -29,7 +29,7 @@ SearchUpは、OnePlus OxygenOS 16のSystem Launcherにあるアプリドロワ�
 ## 互換性
 
 - 確認済み端末: OnePlus 13 / OxygenOS 16
-- 確認済みランチャー: System Launcher `16.6.5`
+- 確認済みランチャー: System Launcher `16.6.17`
 - LSPosed scope: `com.android.launcher`
 - アプリパッケージ: `com.wizpizz.onepluspluslauncher`
 - モジュールバージョン: `1.0.0-oos16.0.7.201`

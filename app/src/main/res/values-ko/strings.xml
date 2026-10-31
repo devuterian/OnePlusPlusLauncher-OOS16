@@ -3,10 +3,10 @@
     <string name="xposed_desc">OnePlus 런처에 검색 자동 포커스, 엔터 실행, 검색 리다이렉트, 퍼지 검색 기능을 더합니다.</string>
     <string name="about_module">이 모듈은 YukiHookAPI를 기반으로 합니다.\n자세히 보기: https://github.com/HighCapable/YuKiHookAPI</string>
     <string name="module_version">모듈 버전: %s</string>
-    <string name="module_not_activated">아직 활성화되지 않았습니다</string>
-    <string name="module_is_activated">모듈이 활성화되어 있습니다</string>
+    <string name="module_not_activated">활성화 안 됨</string>
+    <string name="module_is_activated">활성화됨</string>
 
-    <string name="pref_fuzzy_search_title">한글/영문 검색 더 잘 찾기</string>
+    <string name="pref_fuzzy_search_title">한글·영문 검색 개선</string>
     <string name="pref_search_aliases_title">검색 별명</string>
     <string name="pref_search_aliases_helper">한 줄에 하나씩 \"별명 = 앱 이름\" 형식으로 입력합니다. 예: 맵 = 지도, 네이버지도</string>
     <string name="pref_language_title">언어</string>
@@ -23,12 +23,12 @@
     <string name="category_search_enhancement">SearchUp 기본 흐름</string>
     <string name="category_auto_focus">키보드 동작 (고급)</string>
     <string name="category_search_redirect">검색 이동 (고급)</string>
-    <string name="recommended_flow_hint">추천: 위로 올리고, 바로 입력하고, 엔터로 실행하려면 켜두세요.</string>
+    <string name="recommended_flow_hint">위로 올리고, 바로 입력하고, 엔터로 실행하려면 켜 두는 것이 좋습니다.</string>
     <string name="supported_launcher_version">지원 런처 버전: %s</string>
-    <string name="restart_launcher_button">변경 적용: 런처 재시작</string>
-    <string name="restart_launcher_hint">설정을 바꾼 뒤 바로 반영되지 않으면 눌러주세요.</string>
+    <string name="restart_launcher_button">런처 재시작</string>
+    <string name="restart_launcher_hint">설정이 바로 반영되지 않을 때 런처를 다시 시작합니다.</string>
     <string name="restart_launcher_success">런처를 재시작했습니다.</string>
-    <string name="restart_launcher_failed">런처 재시작에 실패했습니다. root, LSPosed 활성화, System Launcher scope를 확인하세요.</string>
+    <string name="restart_launcher_failed">런처 재시작에 실패했습니다. root 권한, LSPosed 모듈 활성화, System Launcher 적용 범위를 확인해야 합니다.</string>
     <string name="shortcut_restart_launcher_short">런처 재시작</string>
     <string name="shortcut_restart_launcher_long">런처 강제 종료 후 재시작</string>
     <string name="shortcut_open_settings_short">설정 열기</string>
