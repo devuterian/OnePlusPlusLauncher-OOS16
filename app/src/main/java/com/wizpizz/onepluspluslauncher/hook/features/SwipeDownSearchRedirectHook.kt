@@ -25,10 +25,9 @@ object SwipeDownSearchRedirectHook {
 
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
-            "com.android.launcher.touch.WorkspacePullDownDetectController".toClassOrNull(appClassLoader)?.method {
-                name = "showSearchBar"
-                paramCount = 5
-                returnType = BooleanType
+            findMethodQuietly("com.android.launcher.touch.WorkspacePullDownDetectController".toClassOrNull(appClassLoader)) {
+                it.name == "showSearchBar" && it.parameterTypes.size == 5 &&
+                    it.returnType == Boolean::class.javaPrimitiveType
             }?.hook {
                 before {
                     if (prefs.getBoolean(PREF_SWIPE_DOWN_SEARCH_REDIRECT, true)) {
@@ -39,22 +38,17 @@ object SwipeDownSearchRedirectHook {
                         val launcher = args[0]
 
                         // Activate system blur scrim as full-screen blur cover.
-                        val blurController: Any? = try {
-                            launcher?.current()?.method {
-                                name = "getBlurScrimWindowController"
-                                superClass()
-                            }?.call()
-                        } catch (_: Throwable) { null }
+                        // OOS16 exposes blurBackground(int)/detach(); ColorOS 17 obfuscates the
+                        // blur scrim controller (d6.f) and needs an explicit attach first, so the
+                        // cover is skipped there instead of guessing obfuscated names.
+                        val blurController: Any? = launcher?.let { l ->
+                            findMethodQuietly(l.javaClass, listOf("getBlurScrimWindowController"))
+                                ?.let { runCatching { it.invoke(l) }.getOrNull() }
+                        }?.takeIf { findMethodQuietly(it.javaClass, listOf("blurBackground"), Int::class.javaPrimitiveType!!) != null }
 
                         if (blurController != null) {
-                            try {
-                                blurController.current().method {
-                                    name = "blurBackground"
-                                    param(IntType)
-                                    superClass()
-                                }.call(100) // max blur radius
-                                Log.d(TAG, "[SwipeDownSearch] Activated blur scrim (radius=100)")
-                            } catch (_: Throwable) {}
+                            callFirstQuietly(blurController, listOf("blurBackground"), 100, params = arrayOf(Int::class.javaPrimitiveType!!)) // max blur radius
+                            Log.d(TAG, "[SwipeDownSearch] Activated blur scrim (radius=100)")
                         }
 
                         val success = launcher?.let { openAppDrawer(it) }
@@ -94,27 +88,16 @@ object SwipeDownSearchRedirectHook {
                                         val fraction = anim.animatedValue as Float
                                         try {
                                             val radius = (100 * fraction).toInt()
-                                            blurController.current().method {
-                                                name = "blurBackground"
-                                                param(IntType)
-                                                superClass()
-                                            }.call(radius)
+                                            callFirstQuietly(blurController, listOf("blurBackground"), radius, params = arrayOf(Int::class.javaPrimitiveType!!))
                                         } catch (_: Throwable) {}
                                     }
                                     fadeOut.addListener(object : android.animation.AnimatorListenerAdapter() {
                                         override fun onAnimationEnd(animation: android.animation.Animator) {
                                             try {
-                                                blurController.current().method {
-                                                    name = "blurBackground"
-                                                    param(IntType)
-                                                    superClass()
-                                                }.call(0)
+                                                callFirstQuietly(blurController, listOf("blurBackground"), 0, params = arrayOf(Int::class.javaPrimitiveType!!))
                                             } catch (_: Throwable) {}
                                             try {
-                                                blurController.current().method {
-                                                    name = "detach"
-                                                    superClass()
-                                                }.call()
+                                                callFirstQuietly(blurController, listOf("detach"))
                                             } catch (_: Throwable) {}
                                             Log.d(TAG, "[SwipeDownSearch] Blur scrim cleared")
                                         }
@@ -125,36 +108,21 @@ object SwipeDownSearchRedirectHook {
                                 // Safety fallback.
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     try {
-                                        blurController.current().method {
-                                            name = "blurBackground"
-                                            param(IntType)
-                                            superClass()
-                                        }.call(0)
+                                        callFirstQuietly(blurController, listOf("blurBackground"), 0, params = arrayOf(Int::class.javaPrimitiveType!!))
                                     } catch (_: Throwable) {}
                                     try {
-                                        blurController.current().method {
-                                            name = "detach"
-                                            superClass()
-                                        }.call()
+                                        callFirstQuietly(blurController, listOf("detach"))
                                     } catch (_: Throwable) {}
                                 }, 1500L)
                             }
 
                             // Trigger history display.
                             if (prefs.getBoolean(PREF_SEARCH_HISTORY_RECENCY, true)) {
-                                val triggerHistory = {
-                                    val container = FuzzySearchHook.searchContainerInstance
-                                    if (container != null) {
-                                        try {
-                                            container.current().method {
-                                                name = "onSearchResult"
-                                                param(String::class.java, java.util.ArrayList::class.java)
-                                                superClass(true)
-                                            }.call(" ", java.util.ArrayList<Any>())
-                                            Log.d(TAG, "[SwipeDownSearch] Triggered history display")
-                                        } catch (e: Throwable) {
-                                            Log.e(TAG, "[SwipeDownSearch] Failed to trigger history: ${e.message}")
-                                        }
+                                val triggerHistory: () -> Unit = {
+                                    if (HookUtils.triggerRedirectSearchPage(FuzzySearchHook.searchContainerInstance, launcher, appClassLoader)) {
+                                        Log.d(TAG, "[SwipeDownSearch] Triggered history display")
+                                    } else {
+                                        Log.d(TAG, "[SwipeDownSearch] Could not trigger history display")
                                     }
                                 }
                                 Handler(Looper.getMainLooper()).postDelayed({
@@ -172,17 +140,10 @@ object SwipeDownSearchRedirectHook {
                             // Clear blur on failure.
                             if (blurController != null) {
                                 try {
-                                    blurController.current().method {
-                                        name = "blurBackground"
-                                        param(IntType)
-                                        superClass()
-                                    }.call(0)
+                                    callFirstQuietly(blurController, listOf("blurBackground"), 0, params = arrayOf(Int::class.javaPrimitiveType!!))
                                 } catch (_: Throwable) {}
                                 try {
-                                    blurController.current().method {
-                                        name = "detach"
-                                        superClass()
-                                    }.call()
+                                    callFirstQuietly(blurController, listOf("detach"))
                                 } catch (_: Throwable) {}
                             }
                             HookUtils.setRedirectInProgress(false)
@@ -193,29 +154,16 @@ object SwipeDownSearchRedirectHook {
         }
     }
 
-    private fun PackageParam.cleanupPullDownAnimation(controllerInstance: Any, launcherInstance: Any) {
+    private fun cleanupPullDownAnimation(controllerInstance: Any, launcherInstance: Any) {
+        // ColorOS 17 obfuscates the pull-down animator; returning false from showSearchBar
+        // already makes the controller cancel the pull (w(false) + pullCancel()), so the named
+        // OOS16 cleanup is best effort only.
         try {
-            val pullDownAnimator = controllerInstance.current().method {
-                name = "getPullDownAnimator"
-                superClass()
-            }.call()
-
-            if (pullDownAnimator != null) {
-                try {
-                    pullDownAnimator.current().method {
-                        name = "destroyAnimAsHomeGesture"
-                        superClass()
-                    }.call()
-                } catch (e: Throwable) {
-                    pullDownAnimator.current().method {
-                        name = "destroyAnimatorIfNeeded"
-                        superClass()
-                    }.call()
-                }
+            val pullDownAnimator = findMethodQuietly(controllerInstance.javaClass, listOf("getPullDownAnimator"))
+                ?.let { runCatching { it.invoke(controllerInstance) }.getOrNull() } ?: return
+            if (!callFirstQuietly(pullDownAnimator, listOf("destroyAnimAsHomeGesture", "destroyAnimatorIfNeeded"))) {
+                Log.d(TAG, "[SwipeDownSearch] Named pull-down cleanup unavailable; launcher cancels the pull itself")
             }
-
-            // Note: blur scrim cleanup is handled by the fade-out animation,
-            // not here — clearing it early would expose the flash.
         } catch (e: Throwable) {
             Log.e(TAG, "[SwipeDownSearch] Cleanup error: ${e.message}")
         }

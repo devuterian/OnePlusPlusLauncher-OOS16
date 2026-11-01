@@ -60,23 +60,30 @@ object FuzzySearchHook {
             hookTitleMatchResult()
             hookLaunchTracking()
 
-            // Cache the container for SwipeDownSearchRedirectHook and keep result icons from fading in
-            SEARCH_CONTAINER_CLASS.toClassOrNull(appClassLoader)?.method {
-                name = "onSearchResult"
-                param(String::class.java.name, ARRAY_LIST_CLASS)
-            }?.hook {
-                before { searchContainerInstance = instance }
-                after {
-                    val rawQuery = args[0] as? String ?: return@after
-                    if (rawQuery.isNotBlank()) disableSearchResultFade(instance)
+            val containerClass = SEARCH_CONTAINER_CLASS.toClassOrNull(appClassLoader)
+
+            // Cache the container for SwipeDownSearchRedirectHook and keep result icons from fading in.
+            // OOS16: onSearchResult(String, ArrayList); ColorOS 17: onSearchResult(ArrayList, String).
+            val onSearchResult = findMethodQuietly(containerClass) {
+                it.name == "onSearchResult" && it.parameterTypes.size == 2 &&
+                    it.parameterTypes.any { type -> type == String::class.java } &&
+                    it.parameterTypes.any { type -> java.util.ArrayList::class.java.isAssignableFrom(type) }
+            }
+            if (onSearchResult != null) {
+                val queryIndex = onSearchResult.parameterTypes.indexOf(String::class.java)
+                onSearchResult.hook {
+                    before { searchContainerInstance = instance }
+                    after {
+                        val rawQuery = args.getOrNull(queryIndex) as? String ?: return@after
+                        if (rawQuery.isNotBlank()) disableSearchResultFade(instance)
+                    }
                 }
-            } ?: Log.e(TAG, "[FuzzySearch] Could not find onSearchResult method")
+            } else {
+                Log.e(TAG, "[FuzzySearch] Could not find onSearchResult method")
+            }
 
             // Cache container instance on attach (for first-open reliability)
-            SEARCH_CONTAINER_CLASS.toClassOrNull(appClassLoader)?.method {
-                name = "onAttachedToWindow"
-                emptyParam()
-            }?.hook {
+            findMethodQuietly(containerClass, listOf("onAttachedToWindow"))?.hook {
                 after {
                     searchContainerInstance = instance
                     Log.d(TAG, "[FuzzySearch] Cached searchContainerInstance via onAttachedToWindow")
@@ -85,10 +92,7 @@ object FuzzySearchHook {
 
             // Anti-flash: hook showAllAppsFromIntent to synchronously trigger search mode
             // This runs on the SAME frame as the drawer open, before any vsync renders the app grid
-            LAUNCHER_CLASS.toClassOrNull(appClassLoader)?.method {
-                name = "showAllAppsFromIntent"
-                param(BooleanType)
-            }?.hook {
+            findMethodQuietly(LAUNCHER_CLASS.toClassOrNull(appClassLoader), listOf("showAllAppsFromIntent"), Boolean::class.javaPrimitiveType!!)?.hook {
                 after {
                     val useHistory = try { prefs.getBoolean(PREF_SEARCH_HISTORY_RECENCY, true) } catch (_: Throwable) { true }
                     if (!useHistory) return@after
@@ -96,26 +100,21 @@ object FuzzySearchHook {
                     // Only act within 1s of a redirect (not normal swipe-up)
                     if (System.currentTimeMillis() - lastRedirectTime > 1000) return@after
 
-                    val container = searchContainerInstance ?: return@after
-                    try {
-                        container.current().method {
-                            name = "onSearchResult"
-                            param(String::class.java, java.util.ArrayList::class.java)
-                            superClass(true)
-                        }.call(" ", java.util.ArrayList<Any>())
+                    if (HookUtils.triggerRedirectSearchPage(searchContainerInstance, instance, appClassLoader)) {
                         historyInjectedTime = System.currentTimeMillis()
                         Log.d(TAG, "[AntiFlash] Synchronous search mode trigger in showAllAppsFromIntent.after")
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "[AntiFlash] Failed to trigger search mode: ${e.message}")
+                    } else {
+                        Log.d(TAG, "[AntiFlash] Could not trigger search mode")
                     }
                 }
-            }
+            } ?: Log.d(TAG, "[AntiFlash] showAllAppsFromIntent not found")
 
-            // Anti-flash: block reset() within 2s of history injection
-            // The launcher calls reset() after ALL_APPS animation ends, which would wipe search mode
-            SEARCH_CONTAINER_CLASS.toClassOrNull(appClassLoader)?.method {
-                name = "reset"
-                emptyParam()
+            // Anti-flash (OOS16 only): block the container's reset() within 2s of history injection.
+            // The launcher called it after the ALL_APPS animation ended, which wiped search mode.
+            // ColorOS 17 has no container reset(); it only resets search when leaving All Apps.
+            findMethodQuietly(containerClass) {
+                it.name == "reset" && it.parameterTypes.isEmpty() &&
+                    it.declaringClass.name.startsWith("com.android.launcher")
             }?.hook {
                 before {
                     if (System.currentTimeMillis() - historyInjectedTime < HISTORY_LOCK_WINDOW_MS) {
@@ -154,16 +153,24 @@ object FuzzySearchHook {
             Log.e(TAG, "[FuzzySearch] $SEARCH_ALGORITHM_CLASS not found")
             return
         }
-        algorithmClass.method {
-            name = "getTitleMatchResult"
-            param(List::class.java, String::class.java)
-        }.hook {
+        // OOS16: getTitleMatchResult(List, String); ColorOS 17: getTitleMatchResult(String, List).
+        val titleMatch = findMethodQuietly(algorithmClass) {
+            it.name == "getTitleMatchResult" && it.parameterTypes.size == 2 &&
+                it.parameterTypes.any { type -> type == String::class.java } &&
+                it.parameterTypes.any { type -> List::class.java.isAssignableFrom(type) }
+        } ?: run {
+            Log.e(TAG, "[FuzzySearch] getTitleMatchResult not found")
+            return
+        }
+        val queryIndex = titleMatch.parameterTypes.indexOf(String::class.java)
+        val appsIndex = 1 - queryIndex
+        titleMatch.hook {
             before {
-                val query = args[1] as? String ?: return@before
+                val query = args.getOrNull(queryIndex) as? String ?: return@before
                 if (AppSearchEngine.normalize(query).isEmpty()) return@before
                 val useFuzzySearch = try { prefs.getBoolean(PREF_USE_FUZZY_SEARCH, true) } catch (_: Throwable) { true }
                 if (!useFuzzySearch) return@before
-                val apps = args[0] as? List<*> ?: return@before
+                val apps = args.getOrNull(appsIndex) as? List<*> ?: return@before
                 try {
                     val started = System.nanoTime()
                     val results = searchApps(instance, apps, query)
@@ -255,10 +262,25 @@ object FuzzySearchHook {
             if (hiddenAppsCheck == null) {
                 val managerClass = DEEP_PROTECTED_APPS_CLASS.toClassOrNull(classLoader)
                     ?: throw ClassNotFoundException(DEEP_PROTECTED_APPS_CLASS)
-                hiddenAppsGetInstance = managerClass.getMethod("getInstance", android.content.Context::class.java)
-                hiddenAppsCheck = managerClass.methods.first {
+                // OOS16 names first; ColorOS 17 obfuscates them (getInstance -> k, check -> v),
+                // so fall back to the only static (Context) -> manager factory and the only
+                // instance (ItemInfo) -> boolean method.
+                val itemInfoClass = ITEM_INFO_CLASS.toClassOrNull(classLoader)
+                    ?: throw ClassNotFoundException(ITEM_INFO_CLASS)
+                hiddenAppsGetInstance = managerClass.methods.firstOrNull {
+                    it.name == "getInstance" && it.parameterTypes.contentEquals(arrayOf(android.content.Context::class.java))
+                } ?: managerClass.methods.singleOrNull {
+                    java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                        it.returnType == managerClass &&
+                        it.parameterTypes.contentEquals(arrayOf(android.content.Context::class.java))
+                } ?: throw NoSuchMethodException("DeepProtectedAppsManager.getInstance")
+                hiddenAppsCheck = managerClass.methods.firstOrNull {
                     it.name == "isAppHiddenEntryAndSupportPrivacyLock" && it.parameterTypes.size == 1
-                }
+                } ?: managerClass.methods.singleOrNull {
+                    !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                        it.returnType == Boolean::class.javaPrimitiveType &&
+                        it.parameterTypes.contentEquals(arrayOf(itemInfoClass))
+                } ?: throw NoSuchMethodException("DeepProtectedAppsManager.isAppHiddenEntryAndSupportPrivacyLock")
             }
             val manager = hiddenAppsGetInstance?.invoke(null, context)
             hiddenAppsCheck?.invoke(manager, appInfo) as? Boolean

@@ -21,7 +21,7 @@ android {
         versionName = stringProp("project.app.versionName")
         versionCode = intProp("project.app.versionCode")
 
-        buildConfigField("String", "SUPPORTED_LAUNCHER_VERSION", "\"16.6.17\"")
+        buildConfigField("String", "SUPPORTED_LAUNCHER_VERSION", "\"17.3.12\"")
     }
 
     signingConfigs {

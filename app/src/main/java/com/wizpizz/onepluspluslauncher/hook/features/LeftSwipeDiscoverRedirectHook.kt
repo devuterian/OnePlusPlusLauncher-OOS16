@@ -20,12 +20,43 @@ import com.wizpizz.onepluspluslauncher.hook.features.HookUtils.TAG
 object LeftSwipeDiscoverRedirectHook {
     private const val OPLUS_LAUNCHER_OVERLAY_CLASS = "com.android.overlay.OplusLauncherOverlay"
 
+    private val hookedOverlayClasses = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Class<*>, Boolean>())
+
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
-            OPLUS_LAUNCHER_OVERLAY_CLASS.toClassOrNull(appClassLoader)?.method {
-                name = "onScrollInteractionBegin"
-                paramCount = 0
-            }?.hook {
+            // OOS16 keeps the class name; ColorOS 17 obfuscates it (z9.c in 17.3.12). In both, the
+            // overlay is handed to Launcher.setLauncherOverlay(), so hook whatever class arrives there.
+            OPLUS_LAUNCHER_OVERLAY_CLASS.toClassOrNull(appClassLoader)?.let { hookOverlayClass(it) }
+
+            val overlayInterface = "com.android.systemui.plugins.shared.LauncherOverlayManager\$LauncherOverlay"
+                .toClassOrNull(appClassLoader)
+            val setOverlay = overlayInterface?.let {
+                findMethodQuietly(HookUtils.LAUNCHER_CLASS.toClassOrNull(appClassLoader), listOf("setLauncherOverlay"), it)
+            }
+            if (setOverlay == null) {
+                Log.e(TAG, "[LeftSwipe] Launcher.setLauncherOverlay not found")
+                return@apply
+            }
+            setOverlay.hook {
+                before {
+                    val overlay = args.getOrNull(0) ?: return@before
+                    hookOverlayClass(overlay.javaClass)
+                }
+            }
+        }
+    }
+
+    private fun PackageParam.hookOverlayClass(overlayClass: Class<*>) {
+        if (!hookedOverlayClasses.add(overlayClass)) return
+        val method = findMethodQuietly(overlayClass) {
+            it.name == "onScrollInteractionBegin" && it.parameterTypes.isEmpty() &&
+                !java.lang.reflect.Modifier.isAbstract(it.modifiers)
+        } ?: run {
+            Log.e(TAG, "[LeftSwipe] ${overlayClass.name}.onScrollInteractionBegin not found")
+            return
+        }
+        Log.d(TAG, "[LeftSwipe] Hooking ${overlayClass.name}.onScrollInteractionBegin")
+        method.hook {
                 before {
                     // Check if left-swipe redirect is enabled
                     val leftSwipeRedirectEnabled = prefs.getBoolean(PREF_LEFT_SWIPE_DISCOVER_REDIRECT, true)
@@ -40,10 +71,8 @@ object LeftSwipeDiscoverRedirectHook {
                     HookUtils.setRedirectInProgress(true)
                     
                     // Get the Launcher instance from the overlay
-                    val launcher = instance.javaClass.field {
-                        name = "mLauncher"
-                        superClass(true)
-                    }.get(instance).any()
+                    val launcherClass = HookUtils.LAUNCHER_CLASS.toClassOrNull(appClassLoader)
+                    val launcher = launcherClass?.let { findFieldByType(instance.javaClass, it)?.get(instance) }
                     
                     if (launcher != null) {
                         try {
@@ -82,7 +111,6 @@ object LeftSwipeDiscoverRedirectHook {
                     result = null
                     return@before
                 }
-            } ?: Log.e(TAG, "[LeftSwipe] Failed to find OplusLauncherOverlay.onScrollInteractionBegin method")
         }
     }
 }

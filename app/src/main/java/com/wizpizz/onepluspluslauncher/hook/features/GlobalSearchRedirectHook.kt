@@ -23,50 +23,73 @@ object GlobalSearchRedirectHook {
     
     private const val INDICATOR_ENTRY_CLASS = "com.android.launcher3.search.IndicatorEntry"
     private const val SEARCH_ENTRY_CLASS = "com.android.launcher3.search.SearchEntry"
-    private const val QUICK_SEARCH_BOX_PACKAGE = "com.oppo.quicksearchbox"
-    
+    private val QUICK_SEARCH_BOX_PACKAGES = setOf(
+        "com.oppo.quicksearchbox",   // OxygenOS 16
+        "com.heytap.quicksearchbox"  // ColorOS 17
+    )
+    private val SEARCH_ACTIONS = setOf(
+        "android.search.action.GLOBAL_SEARCH",
+        "android.search.action.DOCK_SEARCH"
+    )
+
     fun apply(packageParam: PackageParam) {
         packageParam.apply {
+            // OOS16: boolean startIndicatorApp(Intent); ColorOS 17: void startIndicatorApp(Intent).
             hookIndicatorEntry(INDICATOR_ENTRY_CLASS, "startIndicatorApp")
             hookIndicatorEntry(SEARCH_ENTRY_CLASS, "startSearchApp")
         }
     }
 
     private fun PackageParam.hookIndicatorEntry(className: String, methodName: String) {
-        className.toClassOrNull(appClassLoader)?.method {
-            name = methodName
-            param(IntentClass)
-            returnType = BooleanType
-        }?.hook {
+        val entryClass = className.toClassOrNull(appClassLoader) ?: run {
+            Log.d(TAG, "[GlobalSearch] $className not present")
+            return
+        }
+        val method = findMethodQuietly(entryClass, listOf(methodName), android.content.Intent::class.java) ?: run {
+            Log.d(TAG, "[GlobalSearch] $className.$methodName not found")
+            return
+        }
+        val returnsBoolean = method.returnType == Boolean::class.javaPrimitiveType
+        method.hook {
             before {
                 // Check if global search redirect is enabled
                 val globalSearchRedirectEnabled = prefs.getBoolean(PREF_GLOBAL_SEARCH_REDIRECT, true)
                 if (!globalSearchRedirectEnabled) return@before
 
                 val intentToLaunch = args[0] as? android.content.Intent
-                val targetPackageName = intentToLaunch?.`package`
+                if (!isQuickSearchIntent(intentToLaunch, entryClass)) return@before
 
-                // Check if this is a QuickSearchBox intent (or null default)
-                val isQuickSearchBoxIntent = (targetPackageName == QUICK_SEARCH_BOX_PACKAGE) || (intentToLaunch == null)
+                Log.d(TAG, "[GlobalSearch] Intercepting QuickSearchBox launch, redirecting to All Apps")
 
-                if (isQuickSearchBoxIntent) {
-                    Log.d(TAG, "[GlobalSearch] Intercepting QuickSearchBox launch, redirecting to All Apps")
+                // Mark that we're starting a redirect to prevent AutoFocusHook from triggering
+                HookUtils.setRedirectInProgress(true)
 
-                    // Mark that we're starting a redirect to prevent AutoFocusHook from triggering
-                    HookUtils.setRedirectInProgress(true)
-
-                    if (redirectToAllApps(instance)) {
-                        result = false // Prevent original method
-                        return@before
-                    } else {
-                        // Reset flag if redirect failed
-                        HookUtils.setRedirectInProgress(false)
-                    }
+                if (redirectToAllApps(instance)) {
+                    result = if (returnsBoolean) false else null // Prevent original method
+                } else {
+                    // Reset flag if redirect failed
+                    HookUtils.setRedirectInProgress(false)
                 }
             }
-        } ?: Log.d(TAG, "[GlobalSearch] $className.$methodName not found")
+        }
     }
-    
+
+    /**
+     * A null intent means "the entry's default app". On ColorOS 17 that default can be the
+     * Breeno assistant instead of search, so only treat null as search when Breeno isn't used.
+     */
+    private fun isQuickSearchIntent(intent: android.content.Intent?, entryClass: Class<*>): Boolean {
+        if (intent == null) {
+            val usingBreeno = findMethodQuietly(entryClass) {
+                it.name == "isUsingBreenoEntry" && it.parameterTypes.isEmpty() &&
+                    java.lang.reflect.Modifier.isStatic(it.modifiers)
+            }?.let { runCatching { it.invoke(null) as? Boolean }.getOrNull() } ?: false
+            return !usingBreeno
+        }
+        val pkg = intent.`package` ?: intent.component?.packageName
+        return pkg in QUICK_SEARCH_BOX_PACKAGES || intent.action in SEARCH_ACTIONS
+    }
+
     private fun PackageParam.redirectToAllApps(indicatorEntryInstance: Any): Boolean {
         return try {
             val launcherInstance = getLauncherFromIndicatorEntry(indicatorEntryInstance)
@@ -135,10 +158,9 @@ object GlobalSearchRedirectHook {
     
     private fun getLauncherFromIndicatorEntry(indicatorEntryInstance: Any): Any? {
         return try {
-            indicatorEntryInstance.javaClass.field { 
-                name = "mLauncher"
-                superClass(true)
-            }.get(indicatorEntryInstance).any()
+            val launcherClass = HookUtils.LAUNCHER_CLASS.toClassOrNull(indicatorEntryInstance.javaClass.classLoader)
+            val field = findFieldByType(indicatorEntryInstance.javaClass, launcherClass ?: return null)
+            field?.get(indicatorEntryInstance)
         } catch (e: Exception) {
             Log.e(TAG, "[GlobalSearch] Error getting mLauncher: ${e.message}")
             null

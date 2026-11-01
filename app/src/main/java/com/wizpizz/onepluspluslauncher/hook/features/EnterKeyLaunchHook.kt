@@ -48,16 +48,14 @@ object EnterKeyLaunchHook {
      * Hook AndroidX SearchView for System Launcher 15.4.13
      */
     private fun PackageParam.hookSearchView() {
-        ANDROID_X_SEARCH_VIEW_CLASS.toClassOrNull(appClassLoader)?.method {
-            name = "onSubmitQuery"
-            emptyParam()
-        }?.hook {
+        // Only System Launcher 15.4.13 used this. Later launchers strip/obfuscate androidx
+        // SearchView members, so look it up quietly instead of logging NoSuchMethodError.
+        findMethodQuietly(ANDROID_X_SEARCH_VIEW_CLASS.toClassOrNull(appClassLoader), listOf("onSubmitQuery"))?.hook {
             before {
                 val searchViewInstance = instance as? android.view.View ?: return@before
 
-                val searchAutoComplete = instance.current().method {
-                    name = "getSearchAutoComplete"
-                }.call()
+                val searchAutoComplete = findMethodQuietly(instance.javaClass, listOf("getSearchAutoComplete"))
+                    ?.let { runCatching { it.invoke(instance) }.getOrNull() }
                 val query = (searchAutoComplete as? android.widget.EditText)?.text?.toString() ?: ""
 
                 if (query.isNotEmpty()) {
@@ -92,14 +90,16 @@ object EnterKeyLaunchHook {
      * Hook OnePlus Search Bar Controller for System Launcher 15.6.13+
      */
     private fun PackageParam.hookOnePlusController() {
-        "com.android.launcher3.allapps.search.OplusAllAppsSearchBarController"
-            .toClassOrNull(appClassLoader)?.method {
-                name = "initialize"
-                paramCount = 6
-            }?.hook {
+        val controllerClass = "com.android.launcher3.allapps.search.OplusAllAppsSearchBarController"
+            .toClassOrNull(appClassLoader)
+        // initialize(appsView, algorithm, EditText, activityContext, container, COUISearchBar) on
+        // OOS16 and ColorOS 17; match by name and an EditText parameter rather than position.
+        findMethodQuietly(controllerClass) {
+            it.name == "initialize" && it.parameterTypes.any { type -> android.widget.EditText::class.java.isAssignableFrom(type) }
+        }?.hook {
                 after {
                     val controller = instance
-                    val editTextParam = args[2] as? android.widget.EditText
+                    val editTextParam = args.firstOrNull { it is android.widget.EditText } as? android.widget.EditText
 
                     val searchEditText = editTextParam ?: findEditTextInController(controller)
 
@@ -119,7 +119,7 @@ object EnterKeyLaunchHook {
      * Find EditText field in OnePlus controller
      */
     private fun findEditTextInController(controller: Any): android.widget.EditText? {
-        val fieldNames = listOf("mEditText", "mSearchInput", "mInput", "mSearchField", "editText")
+        val fieldNames = listOf("mSearchView", "mEditText", "mSearchInput", "mInput", "mSearchField", "editText")
 
         for (fieldName in fieldNames) {
             try {
@@ -220,14 +220,13 @@ object EnterKeyLaunchHook {
      * (OOS16+ where EditorAction may not fire)
      */
     private fun PackageParam.hookAutoLaunchOnResults() {
-        "com.android.launcher3.allapps.search.LauncherTaskbarAppsSearchContainerLayout"
-            .toClassOrNull(appClassLoader)?.method {
-                name = "onSearchResult"
-                param(String::class.java.name, "java.util.ArrayList")
+        findMethodQuietly("com.android.launcher3.allapps.search.LauncherTaskbarAppsSearchContainerLayout"
+            .toClassOrNull(appClassLoader)) {
+                it.name == "onSearchResult" && it.parameterTypes.size == 2
             }?.hook {
                 after {
-                    val query = args[0] as? String ?: return@after
-                    val results = args[1] as? java.util.ArrayList<*> ?: return@after
+                    val query = args.firstOrNull { it is String } as? String ?: return@after
+                    val results = args.firstOrNull { it is java.util.ArrayList<*> } as? java.util.ArrayList<*> ?: return@after
                     if (query.isBlank() || results.isEmpty()) return@after
 
                     val now = System.currentTimeMillis()

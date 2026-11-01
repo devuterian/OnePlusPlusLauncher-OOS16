@@ -112,6 +112,13 @@ object HookUtils {
                 return
             }
 
+            // ColorOS 17: focusing the EditText alone no longer switches the drawer into search
+            // mode, and a click in the normal state can start global search instead. Enter the
+            // drawer search mode directly first.
+            if (!isSearchUiInEditState(searchUiManager)) {
+                enterSearchMode(searchUiManager)
+            }
+
             // Try multiple approaches to get and focus search input
             var searchInputFocused = false
             var editTextRef: android.widget.EditText? = null
@@ -427,30 +434,50 @@ object HookUtils {
     }
 
     private fun isSearchUiInEditState(searchUiManager: Any): Boolean {
+        val method = findMethodQuietly(searchUiManager.javaClass, listOf("isInEditState")) ?: return false
         return try {
-            searchUiManager.current().method {
-                name = "isInEditState"
-                superClass()
-            }.call() as? Boolean ?: false
+            method.invoke(searchUiManager) as? Boolean ?: false
         } catch (_: Throwable) {
             false
         }
     }
 
     private fun enterSearchMode(searchUiManager: Any): Boolean {
-        val methodCandidates = listOf("onSearchBarClickInternal", "onSearchBarClick")
-        for (methodName in methodCandidates) {
-            try {
-                searchUiManager.current().method {
-                    name = methodName
-                    superClass()
-                }.call()
-                return true
-            } catch (e: Throwable) {
-                Log.d(TAG, "[AutoFocus] $methodName unavailable: ${e.message}")
+        // onSearchBarClickInternal enters drawer search directly; onSearchBarClick may start
+        // global search (QuickSearchBox / branch search) when the bar is in its normal state.
+        return callFirstQuietly(searchUiManager, listOf("onSearchBarClickInternal", "onSearchBarClick"))
+    }
+
+    /**
+     * Puts the drawer into its search page right after a redirect opened All Apps.
+     *
+     * OOS16 (onSearchResult(String, ArrayList)) showed the search page when fed a blank query.
+     * ColorOS 17 (onSearchResult(ArrayList, String)) ignores results while the query is empty,
+     * so enter search mode the way the search bar does instead.
+     */
+    fun triggerRedirectSearchPage(container: Any?, launcherInstance: Any?, appClassLoader: ClassLoader?): Boolean {
+        if (container != null) {
+            val legacy = findMethodQuietly(container.javaClass) {
+                it.name == "onSearchResult" && it.parameterTypes.size == 2 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    java.util.ArrayList::class.java.isAssignableFrom(it.parameterTypes[1])
+            }
+            if (legacy != null) {
+                return try {
+                    legacy.invoke(container, " ", java.util.ArrayList<Any>())
+                    true
+                } catch (e: Throwable) {
+                    Log.d(TAG, "[Redirect] legacy onSearchResult failed: ${e.cause?.message ?: e.message}")
+                    false
+                }
             }
         }
-        return false
+        val searchUiManager = when {
+            launcherInstance != null && appClassLoader != null -> getSearchUiManager(launcherInstance, appClassLoader)
+            else -> null
+        } ?: container ?: return false
+        if (isSearchUiInEditState(searchUiManager)) return true
+        return enterSearchMode(searchUiManager)
     }
 
     /**
@@ -633,10 +660,61 @@ object HookUtils {
 }
 
 // Extension for safe class resolution
-fun String.toClassOrNull(classLoader: ClassLoader): Class<*>? {
+fun String.toClassOrNull(classLoader: ClassLoader?): Class<*>? {
+    if (classLoader == null) return null
     return try {
         Class.forName(this, false, classLoader)
-    } catch (e: ClassNotFoundException) {
+    } catch (e: Throwable) {
         null
     }
+}
+
+/**
+ * Finds a declared method on [start] or its superclasses without logging a failure.
+ * Launcher builds rename, reorder and obfuscate members, so callers match by shape
+ * instead of letting the hook framework report NoSuchMethodError for every miss.
+ */
+fun findMethodQuietly(start: Class<*>?, predicate: (java.lang.reflect.Method) -> Boolean): java.lang.reflect.Method? {
+    var current = start
+    while (current != null && current != Any::class.java) {
+        val found = try {
+            current.declaredMethods.firstOrNull(predicate)
+        } catch (_: Throwable) {
+            null
+        }
+        if (found != null) return found.apply { isAccessible = true }
+        current = current.superclass
+    }
+    return null
+}
+
+fun findMethodQuietly(start: Class<*>?, names: List<String>, vararg params: Class<*>): java.lang.reflect.Method? {
+    for (name in names) {
+        findMethodQuietly(start) { it.name == name && it.parameterTypes.contentEquals(params) }?.let { return it }
+    }
+    return null
+}
+
+/** Calls the first existing no-throw candidate method; returns true when one was invoked. */
+fun callFirstQuietly(target: Any, names: List<String>, vararg args: Any?, params: Array<Class<*>> = emptyArray()): Boolean {
+    val method = findMethodQuietly(target.javaClass, names, *params) ?: return false
+    return try {
+        method.invoke(target, *args)
+        true
+    } catch (e: Throwable) {
+        android.util.Log.d(HookUtils.TAG, "${method.name} failed: ${e.cause?.message ?: e.message}")
+        false
+    }
+}
+
+/** Finds the first field on [start] or its superclasses whose type is [type] or a subtype. */
+fun findFieldByType(start: Class<*>?, type: Class<*>): java.lang.reflect.Field? {
+    var current = start
+    while (current != null && current != Any::class.java) {
+        current.declaredFields.firstOrNull { type.isAssignableFrom(it.type) }?.let {
+            return it.apply { isAccessible = true }
+        }
+        current = current.superclass
+    }
+    return null
 }
